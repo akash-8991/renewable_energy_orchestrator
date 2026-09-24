@@ -15,6 +15,12 @@ class Settings(BaseSettings):
 
     # Object storage (MinIO locally / S3 in AWS — same boto3 client)
     s3_endpoint_url: str | None = "http://localhost:9000"
+    # Used only for generating presigned URLs handed to a browser/external
+    # client. Inside docker-compose, `s3_endpoint_url` is the container-
+    # network hostname ("minio"), which a browser on the host can't reach —
+    # this is the host-reachable equivalent. Defaults to s3_endpoint_url
+    # when unset (e.g. real AWS S3, where the endpoint is already public).
+    s3_public_endpoint_url: str | None = None
     s3_access_key: str = "reo-minio"
     s3_secret_key: str = "reo-minio-secret"
     s3_region: str = "eu-west-1"

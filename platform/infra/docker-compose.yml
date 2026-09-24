@@ -67,7 +67,9 @@ services:
 
   api:
     build: { context: ../.., dockerfile: platform/apps/api/Dockerfile }
-    environment: *python-env
+    environment:
+      <<: *python-env
+      S3_PUBLIC_ENDPOINT_URL: http://localhost:9000  # browsers/curl on the host use this; container-to-container S3 calls still use S3_ENDPOINT_URL=http://minio:9000
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

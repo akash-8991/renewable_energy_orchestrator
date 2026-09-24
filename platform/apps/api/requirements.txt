@@ -5,6 +5,7 @@ asyncpg>=0.29
 psycopg2-binary>=2.9
 alembic>=1.13
 pydantic>=2.6
+pydantic[email]>=2.6
 pydantic-settings>=2.2
 python-jose[cryptography]>=3.3
 bcrypt>=4.1
