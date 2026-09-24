@@ -16,7 +16,7 @@ edge-simulator ──publish──▶ reo.telemetry (Redis Stream)
                                    │              │
                                    │        independent feasibility validator (BR-03)
                                    │              │
-                    agent-worker (10 agents, doc 07) ── evidence/explanation only, NEVER a command
+                    agent-worker (9 agents, doc 07) ── evidence/explanation only, NEVER a command
                                    │
                     policy/safety engine ──▶ OBSERVE / RECOMMEND / APPROVAL_REQUIRED / AUTONOMOUS_BOUNDED
                                    │
@@ -62,7 +62,26 @@ Every specialist agent calls `ModelGateway.complete_structured(...)` with a Pyda
 The gateway forces the underlying model (Anthropic Claude by default) to emit exactly that JSON
 shape via tool-forcing, validates server-side, retries once, then fails closed
 (`GatewayError`) — a schema-invalid response is never passed through as if it were valid evidence.
-See `apps/agent-worker/agents/` for the 10-agent roster and the exact prompts from doc 07 §2-§9.
+See `apps/agent-worker/agents/` for the 9 specialist agents (data_quality, forecast, asset, market,
+grid, optimisation_reviewer, risk_critic, governance, explanation) and the exact prompts from doc 07
+§2-§5. The 10th role in doc 07 §3, "Orchestrator", is implemented as the deterministic pipeline code
+in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py`'s docstring for why.
+
+## API surface → dashboard workspace map
+
+| Workspace (web) | Primary endpoints |
+|---|---|
+| Portfolio Operations | `GET /twin/portfolio`, `GET /twin/batteries`, `GET /twin/assets/{id}/telemetry` |
+| Decision Centre | `GET /decisions`, `GET /decisions/{id}` |
+| Approval Inbox | `GET /governance/approvals`, `POST /governance/approvals/{id}/decide` |
+| Live Signal Monitor | `GET /signals` |
+| Connector Studio | `GET/POST /connectors`, `POST /connectors/{id}/{test,activate,disable}` |
+| Policy Studio | `GET/PUT /governance/autonomy-policy`, `POST /governance/e-stop` |
+| Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
+| Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` |
+| Tenant Administration | `GET/POST /admin/users`, `GET/POST /admin/tenants` |
+| Platform Operations | rollups over the above; no dedicated endpoint |
+| — (all pages) | `POST /auth/login`, `GET /auth/me`, `POST /ingestion/files` |
 
 ## Decision cycle (FRD §3.1)
 

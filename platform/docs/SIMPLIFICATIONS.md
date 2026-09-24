@@ -23,6 +23,17 @@ component would sit behind, so swapping one in later is an infrastructure change
 | Maker-checker on every governance action | Implemented for Connector Studio activation (creator ≠ activator, enforced in `Connector.status` transitions) and high-risk approvals (`Approval.requires_second_approver`) | These are the two places the spec calls out four-eyes explicitly | Extend the same pattern to any other action by adding a `*_by` pair and a status-transition check |
 | Real external IdP / SSO | OIDC client wired, testable against any dev IdP (e.g. free Keycloak/Auth0 tenant) | No production IdP to point at during this build | Set `oidc_issuer` etc.; no code change |
 
+## Known tracked item: frontend dependency advisories
+
+`npm audit` flags moderate/high advisories in `vite`/`esbuild` (dev-server-only request forwarding,
+not present in the production static build) and `react-router-dom` (an open-redirect variant and an
+SSR-hydration deserialisation issue — this app has no SSR and builds no redirect target from user
+input, so neither is reachable here). Both fixes require a major version bump (Vite 5→8, React
+Router 6→7) outside the currently-declared semver ranges; `npm audit fix --force` applies them but
+wasn't run this session so the bump could be verified properly (full re-test of routing and the dev
+build) rather than shipped untested. Tracked here rather than silently ignored — bump both in a
+dedicated follow-up pass.
+
 ## What is *not* simplified
 
 Built with real logic end to end, calling live services where configured: ingestion (file/DB/

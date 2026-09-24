@@ -37,6 +37,25 @@ Then:
 Demo login: tenant slug `demo-utility`, any seeded email (e.g. `tenant.admin@demo-utility.test`),
 password `Password123!` (local/demo only — see `db/seed.py`).
 
+The dashboard has 10 workspaces (sidebar): Portfolio Operations, Decision Centre, Approval Inbox,
+Live Signal Monitor, Connector Studio, Policy Studio, Simulation Lab, Audit & Exports, Tenant
+Administration, Platform Operations — each role sees a different subset per its RBAC permissions
+(e.g. only `portfolio_manager` can drive Simulation Lab; only `tenant_admin`/`platform_admin` can
+provision users/tenants).
+
+## Run the demo script
+
+`platform/tests/demo_runner.py` drives the live stack through all 10 steps of doc 08 §4's
+demonstration script (baseline → weather/price/outage/grid/demand shocks → mode progression →
+bounded-autonomy policy → an injected-instruction guardrail check → a governed export) and asserts
+the expected outcome at each step — useful both as a live demo narration script and as an
+end-to-end smoke test:
+
+```bash
+cd platform
+python3 tests/demo_runner.py --base-url http://localhost:8000
+```
+
 ### Ports
 
 Postgres and Redis are mapped to non-default host ports (`5433`, `6380`) because a native/

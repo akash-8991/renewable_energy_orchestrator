@@ -51,7 +51,12 @@ services:
 
   minio-init:
     image: minio/mc:latest
-    depends_on: [minio]
+    depends_on:
+      minio: { condition: service_healthy }  # not just service_started: on a fresh volume minio
+                                              # is still formatting its pool when the container
+                                              # itself starts, and `mc alias set` was racing that —
+                                              # first-ever `docker compose up` on a clean volume
+                                              # failed here every time.
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 reo-minio reo-minio-secret &&

@@ -18,6 +18,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s optimizer-worker %(m
 log = logging.getLogger("optimizer-worker")
 
 CYCLE_SECONDS = int(os.environ.get("DECISION_CYCLE_SECONDS", "120"))
+# `run_cycle` returns None for several "not ready yet" conditions (no tenant
+# seeded, no portfolio, no grid asset, forecasts didn't load) as well as
+# genuine errors it swallowed — none of those should cost a full
+# CYCLE_SECONDS wait before the next attempt. Only a *successful* cycle
+# earns the full cadence delay; anything else retries soon.
+RETRY_SECONDS = 10
 
 
 def main() -> None:
@@ -25,7 +31,7 @@ def main() -> None:
     bus.ensure_group(STREAM_DECISION_CYCLE, "optimizer-worker")
     log.info("optimizer-worker started, cadence=%ss, watching %s for on-demand triggers", CYCLE_SECONDS, STREAM_DECISION_CYCLE)
 
-    last_run = 0.0
+    next_due = 0.0  # run immediately on startup
     while True:
         events = bus.consume(STREAM_DECISION_CYCLE, "optimizer-worker", "worker-1", block_ms=2000)
         for entry_id, event in events:
@@ -35,14 +41,14 @@ def main() -> None:
             except Exception:
                 log.exception("on-demand cycle failed")
             bus.ack(STREAM_DECISION_CYCLE, "optimizer-worker", entry_id)
-            last_run = time.time()
 
-        if time.time() - last_run >= CYCLE_SECONDS:
+        if time.time() >= next_due:
             try:
-                run_cycle(trigger="scheduled")
+                decision_id = run_cycle(trigger="scheduled")
             except Exception:
                 log.exception("scheduled cycle failed")
-            last_run = time.time()
+                decision_id = None
+            next_due = time.time() + (CYCLE_SECONDS if decision_id else RETRY_SECONDS)
 
 
 if __name__ == "__main__":
