@@ -29,6 +29,7 @@ class DecisionSummary(BaseModel):
 class DecisionDetail(DecisionSummary):
     plan: dict
     alternatives: list
+    reasoning: dict
     trusted_snapshot_ref: str | None
     forecast_bundle_ref: str | None
 
@@ -69,6 +70,6 @@ def get_decision(
         status=d.status, autonomy_mode=d.autonomy_mode, confidence=d.confidence,
         binding_constraints=d.binding_constraints, risk_flags=d.risk_flags,
         created_at=d.created_at.isoformat(), expires_at=d.expires_at.isoformat() if d.expires_at else None,
-        plan=d.plan, alternatives=d.alternatives,
+        plan=d.plan, alternatives=d.alternatives, reasoning=d.reasoning or {},
         trusted_snapshot_ref=d.trusted_snapshot_ref, forecast_bundle_ref=d.forecast_bundle_ref,
     )
