@@ -42,7 +42,8 @@ def login(body: LoginRequest, db: Session = Depends(db_session)) -> LoginRespons
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid tenant, email or password")
 
         access_token = create_access_token(
-            subject=user.id, tenant_id=tenant.id, roles=user.roles, extra={"email": user.email}
+            subject=user.id, tenant_id=tenant.id, roles=user.roles,
+            extra={"email": user.email, "display_name": user.display_name},
         )
         append_audit_event(
             db, tenant_id=tenant.id, actor_id=user.id, actor_label=user.email,
@@ -61,10 +62,13 @@ class MeResponse(BaseModel):
     tenant_id: str
     roles: list[str]
     permissions: list[str]
+    email: str
+    display_name: str
 
 
 @router.get("/me", response_model=MeResponse)
 def me(ctx: AuthContext = Depends(get_current_user)) -> MeResponse:
     return MeResponse(
-        user_id=ctx.user_id, tenant_id=ctx.tenant_id, roles=ctx.roles, permissions=sorted(ctx.permissions)
+        user_id=ctx.user_id, tenant_id=ctx.tenant_id, roles=ctx.roles, permissions=sorted(ctx.permissions),
+        email=ctx.email, display_name=ctx.display_name,
     )

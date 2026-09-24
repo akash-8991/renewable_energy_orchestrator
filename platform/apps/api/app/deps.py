@@ -32,6 +32,7 @@ async def get_current_user(
         tenant_id=payload["tenant_id"],
         roles=payload.get("roles", []),
         email=payload.get("email", ""),
+        display_name=payload.get("display_name", ""),
     )
     token = set_current_tenant(ctx.tenant_id)
     try:

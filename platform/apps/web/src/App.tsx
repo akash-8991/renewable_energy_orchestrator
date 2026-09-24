@@ -1,18 +1,57 @@
-/**
- * Scaffolding placeholder — the 10 dashboard workspaces (Portfolio
- * Operations, Decision Centre, Approval Inbox, Live Signal Monitor,
- * Connector Studio, Policy Studio, Simulation Lab, Audit & Exports, Tenant
- * Administration, Platform Operations) are wired up in the "Frontend" build
- * phase, once the backend APIs they call exist.
- */
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
+import Layout from "./components/Layout";
+import ApprovalInbox from "./pages/ApprovalInbox";
+import AuditExports from "./pages/AuditExports";
+import ConnectorStudio from "./pages/ConnectorStudio";
+import DecisionCentre from "./pages/DecisionCentre";
+import LiveSignalMonitor from "./pages/LiveSignalMonitor";
+import Login from "./pages/Login";
+import PlatformOperations from "./pages/PlatformOperations";
+import PolicyStudio from "./pages/PolicyStudio";
+import PortfolioOperations from "./pages/PortfolioOperations";
+import SimulationLab from "./pages/SimulationLab";
+import TenantAdministration from "./pages/TenantAdministration";
+
+function RequireAuth({ children }: { children: JSX.Element }) {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return <div className="empty-state">Loading...</div>;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route
+        element={
+          <RequireAuth>
+            <Layout />
+          </RequireAuth>
+        }
+      >
+        <Route path="/" element={<Navigate to="/portfolio" replace />} />
+        <Route path="/portfolio" element={<PortfolioOperations />} />
+        <Route path="/decisions" element={<DecisionCentre />} />
+        <Route path="/approvals" element={<ApprovalInbox />} />
+        <Route path="/signals" element={<LiveSignalMonitor />} />
+        <Route path="/connectors" element={<ConnectorStudio />} />
+        <Route path="/policy" element={<PolicyStudio />} />
+        <Route path="/simulation" element={<SimulationLab />} />
+        <Route path="/audit" element={<AuditExports />} />
+        <Route path="/tenant" element={<TenantAdministration />} />
+        <Route path="/platform" element={<PlatformOperations />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
 export default function App() {
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
-      <h1>Renewable Energy Orchestrator</h1>
-      <p>
-        Platform scaffolding is up. Backend: <code>{import.meta.env.VITE_API_BASE_URL}</code>
-      </p>
-      <p>Dashboard workspaces land once the underlying APIs are built out.</p>
-    </div>
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }

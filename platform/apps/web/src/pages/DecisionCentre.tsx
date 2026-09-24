@@ -1,0 +1,172 @@
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { api } from "../api/client";
+import Badge from "../components/Badge";
+
+interface DecisionSummary {
+  id: string; decision_cycle_id: string; version: number; trigger: string; status: string;
+  autonomy_mode: string; confidence: number; binding_constraints: string[]; risk_flags: any[];
+  created_at: string; expires_at: string | null;
+}
+
+interface DecisionDetail extends DecisionSummary {
+  plan: any; alternatives: any[]; reasoning: any; trusted_snapshot_ref: string | null; forecast_bundle_ref: string | null;
+}
+
+function DecisionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+  const { data, isLoading } = useQuery<DecisionDetail>({
+    queryKey: ["decision", id],
+    queryFn: async () => (await api.get(`/decisions/${id}`)).data,
+  });
+  const [tab, setTab] = useState<"plan" | "reasoning" | "explanation">("explanation");
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="row-between">
+        <h3 style={{ textTransform: "none", fontSize: 14 }}>Decision {id.slice(0, 8)}</h3>
+        <button className="ghost" onClick={onClose}>close ✕</button>
+      </div>
+      {isLoading || !data ? (
+        <div className="empty-state">Loading...</div>
+      ) : (
+        <>
+          <div className="row" style={{ marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+            <Badge text={data.status} />
+            <Badge text={data.autonomy_mode} />
+            <span className="muted">confidence {(data.confidence * 100).toFixed(0)}%</span>
+            <span className="muted">cycle {data.decision_cycle_id}</span>
+          </div>
+          {data.binding_constraints.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <span className="muted">binding: </span>
+              {data.binding_constraints.map((c) => (
+                <Badge key={c} text={c} />
+              ))}
+            </div>
+          )}
+          {data.risk_flags.length > 0 && (
+            <div className="evidence-box">
+              {data.risk_flags.map((f, i) => (
+                <div key={i} className="finding">⚠ {String(f)}</div>
+              ))}
+            </div>
+          )}
+          <div className="tabs">
+            <div className={"tab" + (tab === "explanation" ? " active" : "")} onClick={() => setTab("explanation")}>Operator Explanation</div>
+            <div className={"tab" + (tab === "reasoning" ? " active" : "")} onClick={() => setTab("reasoning")}>Agent Findings</div>
+            <div className={"tab" + (tab === "plan" ? " active" : "")} onClick={() => setTab("plan")}>Raw Plan</div>
+          </div>
+          {tab === "explanation" && (
+            <div>
+              {data.reasoning?.explanation ? (
+                <div className="evidence-box">
+                  {Object.entries(data.reasoning.explanation)
+                    .filter(([k]) => !["decision_id"].includes(k))
+                    .map(([k, v]) => (
+                      <div key={k} className="finding">
+                        <strong>{k.replace(/_/g, " ")}:</strong> {String(v)}
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="muted">No explanation generated yet for this decision.</div>
+              )}
+              {data.alternatives?.length > 0 && (
+                <div className="evidence-box">
+                  <strong>Alternatives considered</strong>
+                  {data.alternatives.map((alt, i) => (
+                    <div key={i} className="finding">
+                      {alt.label}: {alt.status}, Δobjective {alt.delta_objective}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {tab === "reasoning" && (
+            <div>
+              {(data.reasoning?.agent_findings || []).map((f: any, i: number) => (
+                <div key={i} className="evidence-box">
+                  <div className="row-between">
+                    <strong>{f.agent}</strong>
+                    <Badge text={f.status} />
+                  </div>
+                  {(f.findings || []).map((finding: any, j: number) => (
+                    <div key={j} className="finding">
+                      <Badge text={finding.severity} /> {finding.finding}
+                    </div>
+                  ))}
+                  {f.findings?.length === 0 && <div className="muted" style={{ fontSize: 12 }}>no findings raised</div>}
+                </div>
+              ))}
+              {data.reasoning?.governance && (
+                <div className="evidence-box">
+                  <strong>Governance</strong>
+                  <div className="finding">
+                    risk_tier: <Badge text={data.reasoning.governance.risk_tier} /> · requires_approval: {String(data.reasoning.governance.requires_human_approval)}
+                  </div>
+                  <div className="finding muted">{data.reasoning.governance.rationale}</div>
+                </div>
+              )}
+            </div>
+          )}
+          {tab === "plan" && (
+            <pre className="mono" style={{ background: "#0e1526", padding: 12, borderRadius: 8, overflow: "auto", maxHeight: 400 }}>
+              {JSON.stringify(data.plan, null, 2)}
+            </pre>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function DecisionCentre() {
+  const [statusFilter, setStatusFilter] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const { data, isLoading, error } = useQuery<DecisionSummary[]>({
+    queryKey: ["decisions", statusFilter],
+    queryFn: async () => (await api.get("/decisions", { params: statusFilter ? { status: statusFilter } : {} })).data,
+    refetchInterval: 15000,
+  });
+
+  return (
+    <div>
+      <div className="row-between" style={{ marginBottom: 14 }}>
+        <h2 style={{ fontSize: 15, margin: 0 }}>Decision Ledger</h2>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">all statuses</option>
+          <option value="proposed">proposed</option>
+          <option value="failed">failed</option>
+          <option value="executed">executed</option>
+        </select>
+      </div>
+      {isLoading && <div className="empty-state">Loading...</div>}
+      {error && <div className="error-banner">Failed to load decisions.</div>}
+      {data && (
+        <table>
+          <thead>
+            <tr>
+              <th>Created</th><th>Cycle</th><th>Trigger</th><th>Status</th><th>Mode</th><th>Confidence</th><th>Risk Flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((d) => (
+              <tr key={d.id} onClick={() => setSelected(d.id)} style={{ cursor: "pointer" }}>
+                <td>{new Date(d.created_at).toLocaleString()}</td>
+                <td className="mono">{d.decision_cycle_id}</td>
+                <td>{d.trigger}</td>
+                <td><Badge text={d.status} /></td>
+                <td><Badge text={d.autonomy_mode} /></td>
+                <td>{(d.confidence * 100).toFixed(0)}%</td>
+                <td>{d.risk_flags.length > 0 ? <Badge text={`${d.risk_flags.length} flag(s)`} /> : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {data && data.length === 0 && <div className="empty-state">No decisions yet — the optimizer cycles every 2 minutes.</div>}
+      {selected && <DecisionDrawer id={selected} onClose={() => setSelected(null)} />}
+    </div>
+  );
+}

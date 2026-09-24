@@ -99,11 +99,12 @@ PERMISSIONS: dict[str, set[str]] = {
 
 
 class AuthContext:
-    def __init__(self, user_id: str, tenant_id: str, roles: list[str], email: str):
+    def __init__(self, user_id: str, tenant_id: str, roles: list[str], email: str, display_name: str = ""):
         self.user_id = user_id
         self.tenant_id = tenant_id
         self.roles = roles
         self.email = email
+        self.display_name = display_name or email
 
     @property
     def permissions(self) -> set[str]:
