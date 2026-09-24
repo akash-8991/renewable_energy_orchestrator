@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Data ingestion
     data_watch_dir: str = "/data"
 
+    # OT command gateway (separate service/trust boundary — see docs/ARCHITECTURE.md)
+    ot_gateway_url: str = "http://ot-gateway-sim:8010"
+
     # Platform
     environment: str = "local"
     default_tenant_slug: str = "demo-utility"

@@ -325,6 +325,35 @@ class ObjectivePolicy(Base):
 register_tenant_scoped(ObjectivePolicy)
 
 
+class AutonomyPolicy(Base):
+    """FR-GV-001: autonomy modes, server-enforced and effective-dated, at a
+    configurable scope. `scope` is a simple string tag — "portfolio" (the
+    tenant-wide default), "site:<id>", "asset:<id>", or "asset_type:<type>"
+    — with the most specific matching scope winning (see
+    reo_common/autonomy.py's resolution order). A tenant/asset cannot move
+    out of APPROVAL_REQUIRED into AUTONOMOUS_BOUNDED without a recorded
+    safety_case_ref (doc 05 §7: "formal hazard analysis and client-specific
+    safety case required before autonomous production") — enforced in
+    autonomy.py, not just documented here.
+    """
+
+    __tablename__ = "autonomy_policies"
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = tenant_fk()
+    scope: Mapped[str] = mapped_column(String(120), default="portfolio", index=True)
+    mode: Mapped[str] = mapped_column(String(30))  # AutonomyMode
+    max_action_risk: Mapped[str] = mapped_column(String(20), default="low")  # ceiling on what AUTONOMOUS_BOUNDED may execute unattended
+    safety_case_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    set_by: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+register_tenant_scoped(AutonomyPolicy)
+
+
 # ---------------------------------------------------------------------------
 # Decisions, actions, approvals
 # ---------------------------------------------------------------------------

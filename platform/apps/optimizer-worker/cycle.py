@@ -1,16 +1,17 @@
-"""One decision cycle (FRD §3.1, steps 1-5 — this service owns steps up to
-"optimisation service computes feasible schedule"; risk/critic challenge,
-policy disposition and command execution are later build phases).
+"""One decision cycle (FRD §3.1 steps 1-8, minus the actual agent evidence
+pass which runs asynchronously in agent-worker once this publishes
+reo.decision.ready).
 
 1. Lock a trusted snapshot of current state (latest telemetry per asset).
 2. Generate + persist forecasts for the horizon.
 3. Build MILP inputs and solve the base (q50) plan.
 4. Solve a risk-adjusted alternative plan (scenarios.risk_adjusted_series).
 5. Independently validate both plans.
-6. Persist a versioned Decision + Action rows (status=proposed,
-   autonomy_mode=OBSERVE — Phase 5's policy/safety engine is what will
-   later assign real disposition; until it exists, every cycle is
-   correctly conservative: store and explain, never act).
+6. Persist a versioned Decision + Action rows.
+7. Policy/safety engine resolves the effective autonomy mode and each
+   action's risk tier; APPROVAL_REQUIRED actions get a Signal + pending
+   Approval, AUTONOMOUS_BOUNDED low-risk actions (with a recorded safety
+   case) get a Signal dispatched immediately to the OT gateway.
 """
 
 from __future__ import annotations
@@ -19,9 +20,13 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from forecast import generate_and_persist_forecasts
+from reo_common.autonomy import autonomous_execution_allowed, classify_risk, resolve_autonomy_mode
+from reo_common.config import get_settings
 from reo_common.db import SessionLocal, break_glass_cross_tenant
 from reo_common.events import CloudEvent, EventBus, STREAM_DECISION_READY, new_correlation_id
+from reo_common.execution import build_signal_for_action, dispatch_signal
 from reo_common.models import (
+    Approval,
     Asset,
     Battery,
     Constraint,
@@ -38,9 +43,11 @@ from validator import validate_plan
 from sqlalchemy import select
 
 log = logging.getLogger("optimizer-worker.cycle")
+settings = get_settings()
 
 HORIZON_HOURS = 24
 STEP_HOURS = 1.0
+APPROVAL_WINDOW_MINUTES = 15
 
 
 def _load_forecast_series(db, tenant_id: str, asset_id: str, now: datetime, n_steps: int, step_hours: float):
@@ -176,6 +183,11 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             if stale_count > 0:
                 risk_flags.append(f"{stale_count} telemetry readings not fresh at snapshot time")
 
+            # step 7: policy/safety engine resolves the effective mode for
+            # this cycle (BR-05: no configured policy -> the conservative
+            # OBSERVE default, never an implicit permissive one)
+            autonomy_mode, autonomy_policy = resolve_autonomy_mode(db, tenant_id)
+
             decision = Decision(
                 tenant_id=tenant_id,
                 portfolio_id=portfolio.id,
@@ -183,7 +195,7 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
                 version=1,
                 trigger=trigger,
                 horizon=f"{HORIZON_HOURS}h",
-                autonomy_mode="OBSERVE",
+                autonomy_mode=autonomy_mode,
                 status=status,
                 trusted_snapshot_ref=now.isoformat(),
                 forecast_bundle_ref=now.isoformat(),
@@ -216,23 +228,60 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             db.add(decision)
             db.flush()
 
+            asset_by_id = {a.id: a for a in assets}
+            actions: list[Action] = []
             for s in base_result.steps[:1]:  # first step is the immediately actionable one; later steps stay in `plan` as the forward-looking schedule
                 for asset_id, v in s.batteries.items():
+                    asset = asset_by_id.get(asset_id)
+                    rated_kw = asset.rated_capacity_kw if asset else 0.0
                     if v["charge_kw"] > 1.0:
-                        db.add(Action(
+                        risk = classify_risk("charge", v["charge_kw"], rated_kw, decision.binding_constraints, asset_id)
+                        actions.append(Action(
                             tenant_id=tenant_id, decision_id=decision.id, asset_id=asset_id, action_type="charge",
                             quantity=v["charge_kw"], unit="kW", start_time=now, end_time=now + timedelta(hours=STEP_HOURS),
-                            envelope={"max_kw": v["charge_kw"]}, expiry=now + timedelta(minutes=15),
-                            risk_level="low", reason="optimizer: charge from surplus/low price window",
+                            envelope={"max_kw": v["charge_kw"]}, expiry=now + timedelta(minutes=APPROVAL_WINDOW_MINUTES),
+                            risk_level=risk, reason="optimizer: charge from surplus/low price window",
                             expected_outcome={"soc_pct_after": v["soc_pct"]}, requires_approval=True,
                         ))
                     elif v["discharge_kw"] > 1.0:
-                        db.add(Action(
+                        risk = classify_risk("discharge", v["discharge_kw"], rated_kw, decision.binding_constraints, asset_id)
+                        actions.append(Action(
                             tenant_id=tenant_id, decision_id=decision.id, asset_id=asset_id, action_type="discharge",
                             quantity=v["discharge_kw"], unit="kW", start_time=now, end_time=now + timedelta(hours=STEP_HOURS),
-                            envelope={"max_kw": v["discharge_kw"]}, expiry=now + timedelta(minutes=15),
-                            risk_level="low", reason="optimizer: discharge to meet demand/export at favourable price",
+                            envelope={"max_kw": v["discharge_kw"]}, expiry=now + timedelta(minutes=APPROVAL_WINDOW_MINUTES),
+                            risk_level=risk, reason="optimizer: discharge to meet demand/export at favourable price",
                             expected_outcome={"soc_pct_after": v["soc_pct"]}, requires_approval=True,
+                        ))
+            for action in actions:
+                db.add(action)
+            db.flush()
+
+            # Route each action per the resolved autonomy mode. OBSERVE/
+            # RECOMMEND: store only, no Signal (FRD §3.1 step 8). APPROVAL_
+            # REQUIRED: create a Signal + a pending Approval for a human.
+            # AUTONOMOUS_BOUNDED: only actions within the policy's risk
+            # ceiling AND backed by a recorded safety_case_ref dispatch
+            # immediately; anything above that ceiling still falls back to
+            # requiring approval even in autonomous mode.
+            if status == "proposed" and autonomy_mode in ("APPROVAL_REQUIRED", "AUTONOMOUS_BOUNDED"):
+                for action in actions:
+                    if autonomy_mode == "AUTONOMOUS_BOUNDED" and autonomous_execution_allowed(autonomy_policy, action.risk_level):
+                        signal = build_signal_for_action(db, decision, action)
+                        if signal is None:
+                            continue
+                        signal.state = "queued"
+                        db.flush()
+                        command = dispatch_signal(db, signal, ot_gateway_base_url=settings.ot_gateway_url, actor_label="policy-engine:autonomous")
+                        log.info("autonomous dispatch: action=%s signal=%s ack=%s", action.id, signal.id, command.ack_status)
+                    else:
+                        signal = build_signal_for_action(db, decision, action)
+                        if signal is None:
+                            continue
+                        signal.state = "approval_required"
+                        db.add(Approval(
+                            tenant_id=tenant_id, decision_id=decision.id, action_id=action.id, approver_id=None,
+                            outcome="pending", requires_second_approver=(action.risk_level == "high"),
+                            token=f"appr-{signal.idempotency_key}", expires_at=action.expiry,
                         ))
 
             db.commit()

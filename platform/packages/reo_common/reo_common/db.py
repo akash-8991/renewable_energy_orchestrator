@@ -106,8 +106,24 @@ def _enforce_tenant_isolation(execute_state) -> None:
                 with_loader_criteria(model_cls, lambda cls: false())
             )
         else:
+            # `tid` MUST be captured as a genuine closure free-variable, not
+            # a `lambda cls, tid=tenant_id: ...` default argument. SQLAlchemy
+            # caches compiled `with_loader_criteria` lambdas by source code
+            # and only re-parameterises tracked *closure* variables on each
+            # call — a default-argument value is invisible to that tracking,
+            # so the FIRST tenant_id this lambda source ever compiled with
+            # gets silently reused as the bound parameter for every later
+            # call in the process, regardless of the real current tenant.
+            # That produced a real bug here: the second tenant to run a
+            # query in the same process got filtered by the *first* tenant's
+            # id and saw an empty result for its own data. Binding `tid` as
+            # a plain local (a true free variable the lambda closes over)
+            # makes SQLAlchemy re-evaluate it correctly on every call — this
+            # is the pattern SQLAlchemy's own docs use for dynamic
+            # with_loader_criteria values.
+            tid = tenant_id
             execute_state.statement = execute_state.statement.options(
-                with_loader_criteria(model_cls, lambda cls, tid=tenant_id: cls.tenant_id == tid)
+                with_loader_criteria(model_cls, lambda cls: cls.tenant_id == tid)
             )
 
 
