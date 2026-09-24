@@ -1,7 +1,23 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import auth, health
+from .ingestion import folder_watcher, telemetry_consumer
+from .routers import auth, health, ingestion, twin
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s api %(name)s %(message)s")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    telemetry_consumer.start_background_thread()
+    folder_watcher.start_background_thread()
+    yield
+    telemetry_consumer.stop()
+    folder_watcher.stop()
+
 
 app = FastAPI(
     title="Renewable Energy Orchestrator — Platform API",
@@ -13,6 +29,7 @@ app = FastAPI(
         "communicate over the Redis event bus / internal APIs — see "
         "platform/docs/ARCHITECTURE.md."
     ),
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -25,3 +42,5 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(ingestion.router)
+app.include_router(twin.router)

@@ -250,7 +250,12 @@ class Telemetry(Base):
     quality: Mapped[str] = mapped_column(String(20), default="good")  # good|stale|bad|estimated
     source: Mapped[str] = mapped_column(String(60), default="edge-simulator")
 
-    __table_args__ = (Index("ix_telemetry_asset_metric_time", "asset_id", "metric", "event_time"),)
+    __table_args__ = (
+        Index("ix_telemetry_asset_metric_time", "asset_id", "metric", "event_time"),
+        # idempotent consumers (TRD §9 reliability: "at-least-once + idempotent
+        # consumers") — a redelivered stream entry must not create a duplicate row
+        UniqueConstraint("tenant_id", "asset_id", "metric", "event_time", name="uq_telemetry_reading"),
+    )
 
 
 register_tenant_scoped(Telemetry)

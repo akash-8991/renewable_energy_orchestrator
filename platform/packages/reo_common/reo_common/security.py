@@ -72,7 +72,7 @@ PERMISSIONS: dict[str, set[str]] = {
     },
     Role.PORTFOLIO_MANAGER: {
         "read:dashboard", "read:decisions", "read:audit",
-        "manage:objective_policy", "manage:scenarios", "read:economics",
+        "manage:objective_policy", "manage:scenarios", "read:economics", "ingest:files",
     },
     Role.OT_ADMIN: {
         "read:dashboard", "read:decisions", "read:audit",
@@ -85,7 +85,7 @@ PERMISSIONS: dict[str, set[str]] = {
     Role.TENANT_ADMIN: {
         "read:dashboard", "read:decisions", "read:audit",
         "manage:users", "manage:settings", "manage:connectors",
-        "manage:policies", "activate:connector",
+        "manage:policies", "activate:connector", "ingest:files",
     },
     Role.AUDITOR_DPO: {
         "read:dashboard", "read:decisions", "read:audit",
