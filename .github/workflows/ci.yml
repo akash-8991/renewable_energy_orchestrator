@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: reo
+          POSTGRES_PASSWORD: reo
+          POSTGRES_DB: reo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reo -d reo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg2://reo:reo@localhost:5432/reo
+      ASYNC_DATABASE_URL: postgresql+asyncpg://reo:reo@localhost:5432/reo
+      REDIS_URL: redis://localhost:6379/0
+      MODEL_PROVIDER: mock
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install reo_common
+        run: pip install -e platform/packages/reo_common
+
+      - name: Install api + test deps
+        run: |
+          pip install -r platform/apps/api/requirements.txt
+          pip install -r platform/apps/optimizer-worker/requirements.txt
+          pip install -r platform/apps/agent-worker/requirements.txt
+          pip install pytest ruff
+
+      - name: Lint (ruff)
+        run: ruff check platform/packages platform/apps/api platform/apps/optimizer-worker platform/apps/agent-worker --exit-zero
+
+      - name: Run DB migrations
+        run: |
+          cd platform/db
+          alembic upgrade head
+
+      - name: Run tests
+        run: pytest platform/tests -v
+
+  build-images:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    strategy:
+      matrix:
+        service: [api, optimizer-worker, agent-worker, ot-gateway-sim, edge-simulator, export-worker]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.service }} image
+        run: docker build -f platform/apps/${{ matrix.service }}/Dockerfile -t reo-${{ matrix.service }}:ci .
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: platform/apps/web/package-lock.json
+      - run: npm install
+        working-directory: platform/apps/web
+      - run: npm run build
+        working-directory: platform/apps/web
