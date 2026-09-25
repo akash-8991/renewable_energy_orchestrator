@@ -41,15 +41,32 @@ alert notice image and run through the live endpoint with real OpenRouter vision
 correct on every field, including recovering the exact original timestamp
 (`2026-03-13T03:15:00+00:00`) purely from the image.
 
-## What's deliberately not ingested
+## Retail/individual customers — now ingested (`Customer` / `CustomerReading`)
 
-`01_customer_demographics.csv`, `02_customer_energy_consumption_tariff.csv` (79MB), and
-`05_battery.csv` (22MB) describe **100 individual customers'** demographics, 15-minute
-consumption/billing, and per-customer battery telemetry. The platform's canonical model
-(`models/canonical.py`) has no "individually metered customer" entity — `Asset`/`Battery` model a
-portfolio's generation/storage/demand *assets* (a handful of solar farms, wind farms, BESS units,
-consumer load groups), not 100 separate domestic/SME meters. Force-mapping 100 customers onto the
-existing consumer `Asset` rows (there are 6) would misrepresent what those rows are, and genuinely
-modelling this dimension needs a new canonical entity (something like `Customer`/`Meter`, plus the
-RBAC/privacy questions that come with per-customer data) — a real schema extension, not a same-
-session ingestion script. Flagged here rather than silently skipped.
+`01_customer_demographics.csv` and `02_customer_energy_consumption_tariff.csv` (79MB, 863,600
+15-minute rows) describe **100 individually metered retail/SME/industrial customer accounts** —
+genuinely distinct from the handful of industrial "consumer" `Asset` rows (Industrial Estate Line
+1 etc.), which are the utility's own demand-side portfolio, not individually metered accounts.
+Force-mapping 100 customers onto those 6 `Asset` rows would have misrepresented what those rows
+are, so this got a real schema extension instead: `Customer` (one row per source customer —
+type/region/tariff/renewable profile/battery) and `CustomerReading` (one row per customer per
+**day** — the 15-minute file is aggregated on ingestion; see `CustomerReading`'s docstring in
+`models/canonical.py` for why daily is the right grain for customer-level insight trends rather
+than a live control-loop). Ingested by `ingest_customers()` in the same `hackathon_dataset.py`,
+idempotently (`ON CONFLICT DO NOTHING` on each table's unique constraint). Surfaced in the
+dashboard's Customers workspace (Customer Insights tab), filterable by `customer_type`, `region`,
+and `customer_id` (`GET /customers`), with per-customer aggregate insights and a daily trend at
+`GET /customers/{customer_ref}/insights`.
+
+Verified live: 100 `Customer` rows and 9,000 `CustomerReading` rows (100 customers × ~90 days)
+after ingestion; a spot-check of CUST_001's 2026-01-01 aggregate (22.4071 kWh) matches the raw
+CSV's same-day sum exactly.
+
+## What's still deliberately not ingested
+
+`05_battery.csv` (22MB, per-customer 15-minute battery state-of-charge/degradation telemetry) is
+not ingested — `Customer` already carries `battery_installed`/`battery_capacity_kwh` from the
+demographics file, which is what the Customer Insights UI needs; `05_battery`'s per-cycle
+degradation detail has no consumer yet, and would need its own time-series entity (something like
+`CustomerBatteryReading`) to do properly rather than overloading `CustomerReading`, which is
+energy/cost data, not battery-health data.

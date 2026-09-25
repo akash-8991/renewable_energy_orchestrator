@@ -11,6 +11,7 @@ from .routers import (
     audit,
     auth,
     connectors,
+    customers,
     decisions,
     exports,
     governance,
@@ -69,3 +70,4 @@ app.include_router(simulation.router)
 app.include_router(signals.router)
 app.include_router(actions.router)
 app.include_router(observability.router)
+app.include_router(customers.router)

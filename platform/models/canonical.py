@@ -285,6 +285,77 @@ register_tenant_scoped(Forecast)
 
 
 # ---------------------------------------------------------------------------
+# Retail/individual customers (demand-side profile + consumption history —
+# distinct from Asset/Telemetry, which model the utility's own portfolio of
+# generation/storage/demand assets, not the individual meters behind them).
+# See docs/DATA_INGESTION.md for provenance: ingested from the reference
+# dataset's 01_customer_demographics.csv / 02_customer_energy_consumption_
+# tariff.csv, covering residential, SME and industrial customer accounts —
+# not to be confused with the platform's industrial "consumer" Assets
+# (Industrial Estate Line 1 etc.), which are the utility's own demand-side
+# portfolio, not individually metered retail accounts.
+# ---------------------------------------------------------------------------
+
+
+class Customer(Base):
+    __tablename__ = "customers"
+    __table_args__ = (UniqueConstraint("tenant_id", "customer_ref", name="uq_customer_ref"),)
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = tenant_fk()
+    customer_ref: Mapped[str] = mapped_column(String(40), index=True)  # source id, e.g. CUST_001
+    customer_type: Mapped[str] = mapped_column(String(30), index=True)  # Residential|SME|Industrial
+    region: Mapped[str] = mapped_column(String(40), index=True)  # UK region, e.g. Scotland, London
+    annual_consumption_kwh: Mapped[float] = mapped_column(Float)
+    renewable_profile: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    solar_capacity_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    wind_capacity_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    battery_installed: Mapped[bool] = mapped_column(Boolean, default=False)
+    battery_capacity_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    tariff_plan: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    standing_charge_gbp_day: Mapped[float | None] = mapped_column(Float, nullable=True)
+    base_rate_gbp_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    offpeak_rate_gbp_kwh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    occupants: Mapped[float | None] = mapped_column(Float, nullable=True)
+    property_size_m2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    business_size: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+
+register_tenant_scoped(Customer)
+
+
+class CustomerReading(Base):
+    """Timescale hypertable partitioned on event_time (migration 0009) — see
+    the Telemetry docstring for why the PK is composite. One row per
+    customer per day: the source dataset is 15-minute resolution, but
+    ingestion pre-aggregates to daily totals (see ingest_customers() in
+    hackathon_dataset.py) since this backs customer-level insight trends,
+    not a live control-loop that needs sub-hourly granularity."""
+
+    __tablename__ = "customer_readings"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    tenant_id: Mapped[str] = tenant_fk()
+    customer_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("customers.id"), index=True)
+    event_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, index=True)
+    consumption_kwh: Mapped[float] = mapped_column(Float)
+    solar_generation_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    wind_generation_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    net_grid_import_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    export_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    avg_energy_rate_gbp_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    estimated_cost_gbp: Mapped[float] = mapped_column(Float, default=0.0)
+
+    __table_args__ = (
+        Index("ix_customer_readings_customer_time", "customer_id", "event_time"),
+        UniqueConstraint("tenant_id", "customer_id", "event_time", name="uq_customer_reading"),
+    )
+
+
+register_tenant_scoped(CustomerReading)
+
+
+# ---------------------------------------------------------------------------
 # Constraints & objective policy
 # ---------------------------------------------------------------------------
 

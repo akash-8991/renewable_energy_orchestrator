@@ -16,17 +16,21 @@ Scope, stated honestly:
     does, and it's real: the readings go through the identical
     `reo.telemetry` Redis stream + `_validate()` + persistence path any
     other telemetry does.
-  - The three customer-level files (01_customer_demographics,
-    02_customer_energy_consumption_tariff, 05_battery — individual
-    per-customer billing/battery data for 100 residential/SME/industrial
-    customers) are NOT ingested here. The platform's canonical model has
-    no "individual metered customer" entity — Asset/Battery model a
-    portfolio's generation/storage/demand *assets*, not 100 separate
-    domestic meters — force-fitting them onto the existing Asset table
-    would misrepresent what those rows are. Genuinely supporting this
-    dimension would need a new canonical entity (something like
-    `Customer`/`Meter`) and is out of scope of what a same-session
-    ingestion pass can respectably add; see docs/SIMPLIFICATIONS.md.
+  - 01_customer_demographics.csv and 02_customer_energy_consumption_tariff.csv
+    (individual per-customer billing data for 100 residential/SME/industrial
+    customers) ARE ingested — by ingest_customers() below — into the
+    Customer/CustomerReading tables added specifically for this (models/
+    canonical.py), since Asset/Battery model the utility's own portfolio of
+    generation/storage/demand *assets*, not 100 separately metered retail
+    accounts, and force-fitting them onto Asset would misrepresent what
+    those rows are. The 15-minute readings file is pre-aggregated to one
+    row per customer per day on ingestion (863k rows -> ~9k) — see
+    CustomerReading's docstring for why daily granularity is the right
+    grain for customer-level insights rather than a live control-loop.
+  - 05_battery.csv (per-customer home/business battery specs) is still NOT
+    ingested — Customer already carries battery_installed/battery_capacity_
+    kwh from the demographics file, which is what the Customer Insights UI
+    needs; 05_battery's per-cycle degradation detail has no consumer yet.
   - Timestamps are shifted so the most recent row in the requested window
     lands at "now" (preserving each row's original relative spacing) —
     this is real historical data replayed to look live, not fabricated
@@ -42,10 +46,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from database.connection import SessionLocal, break_glass_cross_tenant
-from models.canonical import Asset, Tenant
+from models.canonical import Asset, Customer, CustomerReading, Tenant
 from reo_common.config import get_settings
 from reo_common.events import EventBus
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .file_ingest import publish_readings
 
@@ -170,11 +175,120 @@ def ingest_portfolio_series(*, hours: int = 8) -> dict[str, int]:
     return counts
 
 
+def _to_float(v: str | None) -> float | None:
+    return float(v) if v not in (None, "") else None
+
+
+def ingest_customers() -> dict[str, int]:
+    """Ingests the reference dataset's two retail-customer files into
+    Customer (one row per source customer, from 01_customer_demographics)
+    and CustomerReading (one row per customer per day, aggregated on the
+    way in from 02_customer_energy_consumption_tariff's 863k 15-minute
+    rows). Idempotent — ON CONFLICT DO NOTHING on each table's unique
+    constraint, so re-running this after a partial run or on container
+    restart only fills in what's missing."""
+    db = SessionLocal()
+    try:
+        with break_glass_cross_tenant():
+            tenant = db.execute(select(Tenant).where(Tenant.slug == settings.default_tenant_slug)).scalar_one_or_none()
+        if tenant is None:
+            raise RuntimeError(f"no tenant with slug={settings.default_tenant_slug!r} — run database/seed.py first")
+        tenant_id = tenant.id
+
+        demo_rows = _read_csv_rows("01_customer_demographics.csv", limit_last_n=0)
+        for row in demo_rows:
+            stmt = pg_insert(Customer).values(
+                tenant_id=tenant_id, customer_ref=row["customer_id"],
+                customer_type=row["customer_type"], region=row["region"],
+                annual_consumption_kwh=float(row["annual_consumption_kwh"] or 0),
+                renewable_profile=row["renewable_profile"] or None,
+                solar_capacity_kw=float(row["solar_capacity_kw"] or 0),
+                wind_capacity_kw=float(row["wind_capacity_kw"] or 0),
+                battery_installed=row["battery_installed"] == "1",
+                battery_capacity_kwh=float(row["battery_capacity_kwh"] or 0),
+                tariff_plan=row["tariff_plan"] or None,
+                standing_charge_gbp_day=_to_float(row["standing_charge_gbp_day"]),
+                base_rate_gbp_kwh=_to_float(row["base_rate_gbp_kwh"]),
+                offpeak_rate_gbp_kwh=_to_float(row["offpeak_rate_gbp_kwh"]),
+                occupants=_to_float(row["occupants"]),
+                property_size_m2=_to_float(row["property_size_m2"]),
+                business_size=row["business_size"] or None,
+            ).on_conflict_do_nothing(constraint="uq_customer_ref")
+            db.execute(stmt)
+        db.commit()
+
+        # Re-select rather than trusting the inserts above: ON CONFLICT DO
+        # NOTHING silently skips rows that already existed from a prior run,
+        # so this is the only reliable way to get every customer_ref -> id
+        # mapping, not just the ones inserted just now. Needs break_glass:
+        # this script runs with no tenant context set (it's not a request),
+        # and the tenant-isolation ORM listener (database/connection.py)
+        # fails a SELECT closed to zero rows rather than open when no
+        # context is set — the same reason _load_tenant_assets() above
+        # wraps its own Asset select the same way.
+        with break_glass_cross_tenant():
+            customer_id_by_ref = {
+                ref: cid
+                for cid, ref in db.execute(select(Customer.id, Customer.customer_ref).where(Customer.tenant_id == tenant_id)).all()
+            }
+
+        reading_rows = _read_csv_rows("02_customer_energy_consumption_tariff.csv", limit_last_n=0)
+        daily: dict[tuple[str, str], dict[str, float]] = {}
+        for row in reading_rows:
+            ref = row["customer_id"]
+            day = row["timestamp"][:10]  # YYYY-MM-DD — good enough for a daily bucket key
+            bucket = daily.setdefault((ref, day), {
+                "consumption_kwh": 0.0, "solar_generation_kwh": 0.0, "wind_generation_kwh": 0.0,
+                "net_grid_import_kwh": 0.0, "export_kwh": 0.0, "energy_cost_gbp": 0.0, "standing_charge_gbp": 0.0,
+            })
+            consumption = float(row["consumption_kwh"] or 0)
+            rate = float(row["energy_rate_gbp_kwh"] or 0)
+            bucket["consumption_kwh"] += consumption
+            bucket["solar_generation_kwh"] += float(row["solar_generation_kwh"] or 0)
+            bucket["wind_generation_kwh"] += float(row["wind_generation_kwh"] or 0)
+            bucket["net_grid_import_kwh"] += float(row["net_grid_import_kwh"] or 0)
+            bucket["export_kwh"] += float(row["export_kwh"] or 0)
+            bucket["energy_cost_gbp"] += consumption * rate
+            bucket["standing_charge_gbp"] += float(row["standing_charge_gbp_15min"] or 0)
+
+        insert_rows = []
+        skipped_unknown_customer = 0
+        for (ref, day), agg in daily.items():
+            cid = customer_id_by_ref.get(ref)
+            if cid is None:
+                skipped_unknown_customer += 1
+                continue  # a reading for a customer_id absent from demographics — don't fabricate a profile for it
+            insert_rows.append({
+                "tenant_id": tenant_id, "customer_id": cid,
+                "event_time": datetime.fromisoformat(day).replace(tzinfo=timezone.utc),
+                "consumption_kwh": agg["consumption_kwh"], "solar_generation_kwh": agg["solar_generation_kwh"],
+                "wind_generation_kwh": agg["wind_generation_kwh"], "net_grid_import_kwh": agg["net_grid_import_kwh"],
+                "export_kwh": agg["export_kwh"],
+                "avg_energy_rate_gbp_kwh": (agg["energy_cost_gbp"] / agg["consumption_kwh"]) if agg["consumption_kwh"] else 0.0,
+                "estimated_cost_gbp": agg["energy_cost_gbp"] + agg["standing_charge_gbp"],
+            })
+        if skipped_unknown_customer:
+            log.warning("skipped %d daily readings for customer_ids not present in demographics", skipped_unknown_customer)
+
+        BATCH = 1000
+        for i in range(0, len(insert_rows), BATCH):
+            chunk = insert_rows[i:i + BATCH]
+            stmt = pg_insert(CustomerReading).on_conflict_do_nothing(constraint="uq_customer_reading")
+            db.execute(stmt, chunk)
+        db.commit()
+
+        return {"customers": len(customer_id_by_ref), "customer_reading_days": len(insert_rows)}
+    finally:
+        db.close()
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s hackathon-dataset %(message)s")
     counts = ingest_portfolio_series(hours=8)
     total = sum(counts.values())
     log.info("ingested %d readings from the reference dataset: %s", total, counts)
+    customer_counts = ingest_customers()
+    log.info("ingested retail customer data: %s", customer_counts)
 
 
 if __name__ == "__main__":
