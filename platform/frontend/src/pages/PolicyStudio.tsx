@@ -13,11 +13,13 @@ interface ObjectivePolicy {
 }
 
 const MODES = ["OBSERVE", "RECOMMEND", "APPROVAL_REQUIRED", "AUTONOMOUS_BOUNDED"];
+const RISK_LEVELS = ["low", "medium", "high"];
 const WEIGHT_KEYS = ["cost", "degradation", "carbon", "curtailment", "reliability"] as const;
 
 export default function PolicyStudio() {
   const qc = useQueryClient();
   const [mode, setMode] = useState("OBSERVE");
+  const [maxActionRisk, setMaxActionRisk] = useState("low");
   const [safetyCaseRef, setSafetyCaseRef] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [estopActive, setEstopActive] = useState(false);
@@ -29,7 +31,9 @@ export default function PolicyStudio() {
 
   const setPolicy = useMutation({
     mutationFn: async () =>
-      (await api.put("/governance/autonomy-policy", { scope: "portfolio", mode, safety_case_ref: safetyCaseRef || undefined })).data,
+      (await api.put("/governance/autonomy-policy", {
+        scope: "portfolio", mode, max_action_risk: maxActionRisk, safety_case_ref: safetyCaseRef || undefined,
+      })).data,
     onSuccess: () => {
       setError(null);
       qc.invalidateQueries({ queryKey: ["autonomy-policy"] });
@@ -102,10 +106,24 @@ export default function PolicyStudio() {
           </select>
         </div>
         {mode === "AUTONOMOUS_BOUNDED" && (
-          <div className="field">
-            <label>Safety case reference (required — doc 05 §7)</label>
-            <input value={safetyCaseRef} onChange={(e) => setSafetyCaseRef(e.target.value)} placeholder="e.g. SC-2026-001" style={{ width: "100%" }} />
-          </div>
+          <>
+            <div className="field">
+              <label>Max action risk (ceiling for unattended dispatch)</label>
+              <select value={maxActionRisk} onChange={(e) => setMaxActionRisk(e.target.value)} style={{ width: "100%" }}>
+                {RISK_LEVELS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                Only actions classified at or below this risk dispatch autonomously; anything above still
+                falls back to requiring human approval even in this mode.
+              </p>
+            </div>
+            <div className="field">
+              <label>Safety case reference (required — doc 05 §7)</label>
+              <input value={safetyCaseRef} onChange={(e) => setSafetyCaseRef(e.target.value)} placeholder="e.g. SC-2026-001" style={{ width: "100%" }} />
+            </div>
+          </>
         )}
         <button onClick={() => setPolicy.mutate()} disabled={setPolicy.isPending}>Apply</button>
       </div>

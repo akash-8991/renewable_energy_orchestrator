@@ -66,9 +66,15 @@ must explicitly opt into `break_glass_cross_tenant()`, which is meant to be pair
 ## Agent layer (doc 07)
 
 Every specialist agent calls `ModelGateway.complete_structured(...)` with a Pydantic response model.
-The gateway forces the underlying model (Anthropic Claude by default) to emit exactly that JSON
+The gateway forces the underlying model (OpenRouter by default) to emit exactly that JSON
 shape via tool-forcing, validates server-side, retries once, then fails closed
-(`GatewayError`) — a schema-invalid response is never passed through as if it were valid evidence.
+(`GatewayError`) — a schema-invalid response is never passed through as if it were valid evidence,
+and the same retry-then-fail-closed contract applies to *any* call failure, not just an
+invalid response: a provider-level error (rate limit, billing, auth, network, 5xx) is caught and
+converted to `GatewayError` too, so agent/worker.py's per-agent `except GatewayError` — which marks
+that one agent INSUFFICIENT_EVIDENCE and lets every other agent in the pass still run — always gets
+the chance to do so, rather than the raw provider exception escaping uncaught and aborting the
+whole decision's reasoning before anything is committed.
 See `agent/agents/` for the 9 specialist agents (data_quality, forecast, asset, market,
 grid, optimisation_reviewer, risk_critic, governance, explanation) and the exact prompts from doc 07
 §2-§5. The 10th role in doc 07 §3, "Orchestrator", is implemented as the deterministic pipeline code

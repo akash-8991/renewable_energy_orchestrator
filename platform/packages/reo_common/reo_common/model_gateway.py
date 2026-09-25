@@ -190,6 +190,25 @@ class ModelGateway(ABC):
                 last_error = exc
                 retried = True
                 continue
+            except Exception as exc:
+                # Any provider-level call failure — billing/quota (402),
+                # rate limit (429), auth (401), network timeout, 5xx — not
+                # just a schema-validation failure. This class's docstring
+                # promises callers "retries once, then fails closed
+                # (GatewayError) rather than passing through free-form
+                # text"; narrowing the catch to only parsing exceptions let
+                # a raw provider exception (e.g. openai.APIStatusError)
+                # escape uncaught instead, which crashed the entire
+                # decision's agent pass on the first agent that hit it and
+                # left every later agent — including the explanation agent
+                # Decision Centre reads — never even attempted, with
+                # nothing committed to Decision.reasoning at all. This is
+                # exactly the failure `except GatewayError` in
+                # agent/worker.py already exists to handle gracefully per
+                # agent; it just never got the chance to.
+                last_error = exc
+                retried = True
+                continue
 
         latency_ms = (time.perf_counter() - start) * 1000
         record = ModelCallRecord(
@@ -292,6 +311,15 @@ class OpenAIModelGateway(ModelGateway):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content_parts if images else user_content},
             ],
+            # Every response here is a small structured-JSON evidence
+            # envelope (a handful of findings/fields against a Pydantic
+            # schema), never long-form text — but leaving max_tokens unset
+            # makes some models/providers default to their max output
+            # ceiling (16384 for gpt-4o-mini) regardless of what's actually
+            # needed, and some providers (OpenRouter) reserve/charge credit
+            # against the *requested* ceiling, not the tokens actually used.
+            # Matches the Anthropic gateway's own max_tokens=4096 below.
+            max_tokens=4096,
             # strict:True would additionally require OpenAI's own structural
             # rules on every schema (every property in `required`, explicit
             # `additionalProperties: false` on every object, no plain
