@@ -107,13 +107,33 @@ You'll see a line ending `demo login: any email above / password 'Password123!' 
 1. Open your browser to **http://localhost:5173**.
 2. Log in with:
    - Tenant slug: `demo-utility`
-   - Email: `tenant.admin@demo-utility.test` (or any other seeded email — see
-     `database/seed.py` for the full list and which role each one has)
+   - Email: any seeded email from the table below
    - Password: `Password123!`
 3. You should land on **Portfolio Operations** showing live generation/demand numbers that update
    every few seconds (the built-in `edge-simulator` publishes synthetic telemetry continuously).
 4. The sidebar has all 13 workspaces — Decision Centre is a good second stop; it fills in with a
    new entry roughly every 2 minutes as the optimizer's decision cycle runs.
+
+#### Demo accounts (one per role)
+
+All 9 seeded accounts share the same tenant slug and password — these are local/demo-only
+credentials from `database/seed.py`, never used outside seed data. Pick whichever role you want to
+test; the dashboard's RBAC gates what each one can see and do (e.g. only Operator/Senior Operator
+can decide items in Approval Inbox — everyone else sees it read-only).
+
+**Tenant slug:** `demo-utility` · **Password (all accounts):** `Password123!`
+
+| Role | Email | Can do |
+|---|---|---|
+| Viewer | `viewer@demo-utility.test` | Read-only dashboard/decisions/audit |
+| Operator | `operator@demo-utility.test` | + Approve assigned items, acknowledge signals, bounded override |
+| Senior Operator | `senior.operator@demo-utility.test` | + Four-eyes approval, pause ops, e-stop |
+| Portfolio Manager | `portfolio.manager@demo-utility.test` | Objective policy, scenarios, constraints, file ingestion, economics |
+| OT Admin | `ot.admin@demo-utility.test` | Adapters, command envelopes, control readiness |
+| Model Admin | `model.admin@demo-utility.test` | Model registry, eval runs, model deploys |
+| Tenant Admin | `tenant.admin@demo-utility.test` | Users, settings, connectors, policies, file ingestion |
+| Auditor / DPO | `auditor@demo-utility.test` | Evidence export, privacy, DSR |
+| Platform Admin | `platform.admin@demo-utility.test` | Everything above + tenant provisioning, platform config, break-glass |
 
 Other useful local URLs:
 - API interactive docs: http://localhost:8000/docs

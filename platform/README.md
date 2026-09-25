@@ -92,7 +92,8 @@ Then:
 - MinIO console: http://localhost:9001 (`reo-minio` / `reo-minio-secret`)
 
 Demo login: tenant slug `demo-utility`, any seeded email (e.g. `tenant.admin@demo-utility.test`),
-password `Password123!` (local/demo only — see `database/seed.py`).
+password `Password123!` (local/demo only — see `database/seed.py`). For the full table of all 9
+demo accounts and what each role can do, see **`docs/DEPLOYMENT.md`** (§ A7, "Demo accounts").
 
 The dashboard has 11 workspaces (sidebar): Portfolio Operations, Decision Centre, Approval Inbox,
 Live Signal Monitor, Action Tickets, Connector Studio, Document Intake, Policy Studio, Simulation
