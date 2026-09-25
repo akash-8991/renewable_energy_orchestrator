@@ -46,13 +46,18 @@ returns schema-valid responses, so you can see the whole pipeline work with no A
 ### A4. Configure environment variables
 
 `docker compose` reads a `.env` file from the same folder as `docker-compose.yml`
-(`infrastructure/`), so:
+(`infrastructure/`). Easiest: run the helper script, which creates it from `.env.example` if
+needed and prompts for the key with hidden input (never echoed, never in shell history):
 
 ```bash
-cp .env.example infrastructure/.env
+./infrastructure/set_api_key.sh OPENROUTER_API_KEY
 ```
 
-Open `infrastructure/.env` in your editor and fill in:
+It also offers to set `MODEL_PROVIDER=openrouter` to match. Re-run it any time to rotate the key
+or switch provider (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY` are supported the same way).
+
+Or by hand: `cp .env.example infrastructure/.env`, then open `infrastructure/.env` in your editor
+and fill in:
 
 ```bash
 MODEL_PROVIDER=openrouter

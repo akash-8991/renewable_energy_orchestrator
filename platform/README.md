@@ -128,8 +128,11 @@ many providers/models), with automatic fallback to a deterministic mock gateway 
 API key, schema-valid canned responses) whenever no key is configured, so the whole pipeline still
 runs out of the box with nothing set up.
 
-For real agent reasoning, copy `platform/.env.example` to `platform/infrastructure/.env` (used by
-`docker compose`, which loads `.env` from the compose file's own directory) and set:
+For real agent reasoning, run `./infrastructure/set_api_key.sh OPENROUTER_API_KEY` (creates
+`platform/infrastructure/.env` from `.env.example` if needed, prompts for the key with hidden
+input, offers to set `MODEL_PROVIDER` to match) — or copy `platform/.env.example` to
+`platform/infrastructure/.env` (used by `docker compose`, which loads `.env` from the compose
+file's own directory) by hand and set:
 
 ```bash
 MODEL_PROVIDER=openrouter
