@@ -118,10 +118,14 @@ def load_portfolio() -> tuple[str, list[Asset], dict[str, Battery]]:
         db.close()
 
 
+def _reset_asset_state(assets: list[Asset], batteries: dict[str, Battery]) -> tuple[dict[str, WindState], dict[str, float]]:
+    wind_states = {a.id: WindState(speed_ms=random.uniform(5, 9)) for a in assets if a.asset_type == "wind"}
+    battery_soc = {asset_id: battery.soc_current_pct for asset_id, battery in batteries.items()}
+    return wind_states, battery_soc
+
+
 def main() -> None:
     bus = EventBus()
-    wind_states: dict[str, WindState] = {}
-    battery_soc: dict[str, float] = {}
 
     tenant_id, assets, batteries = "", [], {}
     while not assets:
@@ -130,15 +134,26 @@ def main() -> None:
             log.info("no seeded portfolio found yet — waiting for db/seed.py")
             time.sleep(5)
 
-    for asset in assets:
-        if asset.asset_type == "wind":
-            wind_states[asset.id] = WindState(speed_ms=random.uniform(5, 9))
-    for asset_id, battery in batteries.items():
-        battery_soc[asset_id] = battery.soc_current_pct
-
+    wind_states, battery_soc = _reset_asset_state(assets, batteries)
     log.info("edge-simulator started for tenant %s, %d assets", tenant_id, len(assets))
 
+    # Re-check the tenant every tick (one cheap indexed SELECT — negligible
+    # next to the dozens of telemetry publishes each tick already does): a
+    # full database clear + reseed (see docs/DEPLOYMENT.md's troubleshooting
+    # table) creates a *new* Tenant row with a new id, and this process
+    # would otherwise keep publishing forever for the old, now-deleted
+    # tenant/asset ids — telemetry_consumer.py silently quarantines every
+    # one of those as "unknown asset_id", which looks exactly like "the
+    # simulator isn't running" from the dashboard with no error anywhere
+    # obvious. Self-healing here means a DB reset doesn't also require
+    # remembering to restart this one specific container.
     while True:
+        current_tenant_id, current_assets, current_batteries = load_portfolio()
+        if current_tenant_id != tenant_id and current_assets:
+            log.info("tenant changed (%s -> %s) — reloading portfolio", tenant_id or "<none>", current_tenant_id)
+            tenant_id, assets, batteries = current_tenant_id, current_assets, current_batteries
+            wind_states, battery_soc = _reset_asset_state(assets, batteries)
+
         scenario = read_scenario_state(bus)
         cloud_cover = float(scenario["cloud_cover"])
         wind_surge = float(scenario["wind_surge"])

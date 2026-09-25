@@ -105,10 +105,25 @@ function ApplyConstraintForm({ doc, assets, onDone }: { doc: DocumentIntakeRow; 
   );
 }
 
+const DOCUMENT_SUFFIXES = [".pdf", ".png", ".jpg", ".jpeg"];
+const TABLE_SUFFIXES = [".csv", ".json", ".xlsx", ".xlsm"];
+const ALL_SUFFIXES = [...DOCUMENT_SUFFIXES, ...TABLE_SUFFIXES];
+
+function suffixOf(filename: string): string {
+  const i = filename.lastIndexOf(".");
+  return i === -1 ? "" : filename.slice(i).toLowerCase();
+}
+
+interface FileUploadResult {
+  filename: string;
+  status: "ok" | "error";
+  message: string;
+}
+
 export default function DocumentIntake() {
   const qc = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [results, setResults] = useState<FileUploadResult[]>([]);
 
   const { data: documents, isLoading } = useQuery<DocumentIntakeRow[]>({
     queryKey: ["document-intakes"],
@@ -121,40 +136,76 @@ export default function DocumentIntake() {
   });
   const genAssets = (portfolio || []).flatMap((p) => p.sites.flatMap((s) => s.assets)).filter((a) => a.asset_type === "solar" || a.asset_type === "wind");
 
-  const upload = useMutation({
-    mutationFn: async (file: File) => {
-      const form = new FormData();
-      form.append("file", file);
-      return (await api.post("/ingestion/documents", form, { headers: { "Content-Type": "multipart/form-data" } })).data;
+  // One file at a time, not Promise.all — a vision extraction call can take
+  // several seconds, and running many of those concurrently against the
+  // model gateway's per-tenant rate limit would just make most of them fail
+  // closed instead of queuing. Different files can be different data
+  // sources (a storm advisory PDF alongside a CSV export), each routed to
+  // whichever ingestion path actually understands its format.
+  const uploadAll = useMutation({
+    mutationFn: async (files: File[]) => {
+      const outcomes: FileUploadResult[] = [];
+      for (const file of files) {
+        const suffix = suffixOf(file.name);
+        const form = new FormData();
+        form.append("file", file);
+        try {
+          if (TABLE_SUFFIXES.includes(suffix)) {
+            const { data } = await api.post("/ingestion/files", form, { headers: { "Content-Type": "multipart/form-data" } });
+            outcomes.push({ filename: file.name, status: "ok", message: `${data.rows_queued} reading(s) queued` });
+          } else if (DOCUMENT_SUFFIXES.includes(suffix)) {
+            const { data } = await api.post("/ingestion/documents", form, { headers: { "Content-Type": "multipart/form-data" } });
+            outcomes.push({ filename: file.name, status: "ok", message: `extracted as ${data.document_type}` });
+          } else {
+            outcomes.push({ filename: file.name, status: "error", message: `unsupported file type ${suffix || "(none)"} — supported: ${ALL_SUFFIXES.join(", ")}` });
+          }
+        } catch (err: any) {
+          outcomes.push({ filename: file.name, status: "error", message: err?.response?.data?.detail || "upload failed" });
+        }
+      }
+      return outcomes;
     },
-    onSuccess: () => {
-      setUploadError(null);
+    onSuccess: (outcomes) => {
+      setResults(outcomes);
       if (fileInput.current) fileInput.current.value = "";
       qc.invalidateQueries({ queryKey: ["document-intakes"] });
+      qc.invalidateQueries({ queryKey: ["operations-status"] });
     },
-    onError: (err: any) => setUploadError(err?.response?.data?.detail || "upload failed"),
   });
 
   return (
     <div>
       <h2 style={{ fontSize: 15 }}>Document Intake</h2>
       <p className="muted">
-        Upload a scanned/photographed PDF or image — a maintenance notice, storm/weather advisory, grid outage
-        notice, or inspection report — that doesn't arrive as structured CSV/JSON/XLSX telemetry. It's read by the
-        same model gateway every specialist agent uses, but with vision, and the extraction lands here as
-        evidence for review before it can affect anything real.
+        Upload one or more files from any data source — scanned/photographed PDFs or images (maintenance
+        notices, storm/weather advisories, grid outage notices, inspection reports), read with vision by the
+        same model gateway every specialist agent uses; or structured CSV/JSON/XLSX telemetry tables, parsed
+        directly. Extractions land here as evidence for review before they can affect anything real. Once
+        anything here ingests successfully, the optimizer starts automatically if it wasn't already running.
       </p>
-      {uploadError && <div className="error-banner">{uploadError}</div>}
+      {results.length > 0 && (
+        <div className={results.some((r) => r.status === "error") ? "error-banner" : "evidence-box"} style={{ marginBottom: 14 }}>
+          {results.map((r, i) => (
+            <div key={i} className={results.length > 1 ? "finding" : undefined}>
+              {r.status === "ok" ? "✓" : "⚠"} <strong>{r.filename}</strong>: {r.message}
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div className="card" style={{ marginBottom: 16, maxWidth: 520 }}>
-        <h3>Upload a document</h3>
-        <input ref={fileInput} type="file" accept=".pdf,.png,.jpg,.jpeg" />
+      <div className="card" style={{ marginBottom: 16, maxWidth: 560 }}>
+        <h3>Upload documents / data files</h3>
+        <input ref={fileInput} type="file" accept={ALL_SUFFIXES.join(",")} multiple />
+        <p className="muted" style={{ fontSize: 11, marginTop: 6, marginBottom: 0 }}>
+          Select multiple files at once — each is routed automatically: {TABLE_SUFFIXES.join("/")} as structured
+          telemetry, {DOCUMENT_SUFFIXES.join("/")} through vision extraction.
+        </p>
         <div style={{ marginTop: 10 }}>
           <button
-            onClick={() => fileInput.current?.files?.[0] && upload.mutate(fileInput.current.files[0])}
-            disabled={upload.isPending}
+            onClick={() => fileInput.current?.files?.length && uploadAll.mutate(Array.from(fileInput.current.files))}
+            disabled={uploadAll.isPending}
           >
-            {upload.isPending ? "Extracting..." : "Upload & extract"}
+            {uploadAll.isPending ? "Uploading..." : "Upload & extract"}
           </button>
         </div>
       </div>

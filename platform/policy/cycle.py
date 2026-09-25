@@ -76,6 +76,13 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
                 return None
             tenant_id = tenant.id
 
+            if tenant.operating_state != "running":
+                # Portfolio Operations' Start Optimizer gate (backend/app/
+                # routers/operations.py) — idle is the default for a fresh
+                # deploy or a cleared database, so this stays silent (not a
+                # warning) rather than logging every 10s while idle.
+                return None
+
             portfolio = db.execute(select(Portfolio).where(Portfolio.tenant_id == tenant_id)).scalars().first()
             if portfolio is None:
                 return None

@@ -109,10 +109,22 @@ You'll see a line ending `demo login: any email above / password 'Password123!' 
    - Tenant slug: `demo-utility`
    - Email: any seeded email from the table below
    - Password: `Password123!`
-3. You should land on **Portfolio Operations** showing live generation/demand numbers that update
-   every few seconds (the built-in `edge-simulator` publishes synthetic telemetry continuously).
-4. The sidebar has all 13 workspaces — Decision Centre is a good second stop; it fills in with a
-   new entry roughly every 2 minutes as the optimizer's decision cycle runs.
+3. You should land on **Portfolio Operations** showing an **idle** state — a fresh tenant doesn't
+   start making decisions on its own. Connect a data source first, then start it:
+   - Either click **Document Intake** (top of Portfolio Operations) and upload a file — any
+     `.csv`/`.json`/`.xlsx` (structured telemetry) or `.pdf`/`.png`/`.jpg` (a document, read via
+     vision). A successful upload **auto-starts** the optimizer, no extra click needed; or
+   - Go to **Connector Studio**, register a connector (any `kind`), have a *different* user
+     activate it (maker-checker — e.g. `tenant.admin` creates, `platform.admin` activates), then
+     back on Portfolio Operations click **Start Optimizer** (enabled once at least one connector
+     is active or a document has been ingested).
+4. Once started, Portfolio Operations fills in with live generation/demand numbers that update
+   every few seconds (the built-in `edge-simulator` publishes synthetic telemetry continuously
+   regardless of this gate — starting/stopping controls the decision cycle and dashboard display,
+   not the underlying telemetry stream), and the sidebar's 14 workspaces come alive — Decision
+   Centre is a good second stop; it fills in with a new entry roughly every 2 minutes as the
+   optimizer's decision cycle runs. **Stop Optimizer** on Portfolio Operations returns to idle at
+   any time.
 
 #### Demo accounts (one per role)
 
@@ -189,9 +201,10 @@ docker compose down -v       # stop everything AND delete all data (fresh slate 
 |---|---|
 | `docker compose up` fails with a port-already-in-use error on 5432/6379 | You likely have a native Postgres/Redis running. This platform already maps around that (host ports `5433`/`6380`) — check nothing *else* is also on those two, or edit the `ports:` lines in `infrastructure/docker-compose.yml`. |
 | `api` container keeps restarting | `docker compose logs api --tail 50` — almost always either the `migrate` service hasn't finished (check `docker compose logs migrate`) or `infrastructure/.env` has a typo. |
-| Dashboard loads but shows no data | Did you run step A6 (seed)? `docker compose run --rm api python /app/platform/database/seed.py` is safe to re-run — it no-ops if the tenant already exists. |
+| Dashboard loads but shows no data | Two possible causes: (1) Did you run step A6 (seed)? `docker compose run --rm api python /app/platform/database/seed.py` is safe to re-run — it no-ops if the tenant already exists. (2) Portfolio Operations shows an **idle** empty state by design until you connect a data source and click Start Optimizer (see A7 step 3) — this isn't a bug. |
 | Agents seem to give generic/templated answers | You're on the mock gateway — check `MODEL_PROVIDER=openrouter` and a real `OPENROUTER_API_KEY` are set in `infrastructure/.env`, then `docker compose up -d --build api agent-worker` to pick up the change. |
 | `pip install` fails on `psycopg2-binary` (Apple Silicon) | Install PostgreSQL client libs first: `brew install postgresql`, then retry. |
+| Just did a full database wipe (`TRUNCATE ... CASCADE` or similar) and want a genuinely clean state | Reseed (`database/seed.py`) — that's it. `edge-simulator` re-checks the current tenant every ~10s tick and reloads its portfolio automatically when it changes (a fresh `Tenant` row means a new id); `api`/`optimizer-worker`/`agent-worker` already re-resolve the current tenant on every request/cycle, so nothing needs a manual restart. |
 
 ---
 

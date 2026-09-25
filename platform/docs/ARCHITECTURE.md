@@ -84,21 +84,21 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 
 | Workspace (web) | Primary endpoints |
 |---|---|
-| Portfolio Operations | `GET /twin/portfolio`, `GET /twin/batteries`, `GET /twin/assets/{id}/telemetry`, `GET /twin/trend` (chart), `GET /decisions` (recent-decisions summary, `limit=5`) |
+| Portfolio Operations | `GET/POST /operations/{status,start,stop}` (start/stop gate), `GET /twin/portfolio`, `GET /twin/batteries`, `GET /twin/assets/{id}/telemetry`, `GET /twin/trend` (chart), `GET /decisions` (recent-decisions summary, `limit=5`) — the twin/trend/decisions calls only run once `operating_state=running` |
 | Decision Centre | `GET /decisions`, `GET /decisions/{id}`, `GET /decisions/{id}/scenario-runs` |
 | Customers | `GET /customers`, `GET /customers/filters`, `GET /customers/{ref}/insights` (retail accounts); `GET /twin/portfolio` (asset picker), `GET /actions?asset_id=`, `GET /decisions/{id}` (governed-asset decisions) |
 | Approval Inbox | `GET /governance/approvals`, `POST /governance/approvals/{id}/decide` |
 | Live Signal Monitor | `GET /signals` |
 | Action Tickets | `GET /actions` |
-| Connector Studio | `GET/POST /connectors` (incl. `kind`: generic/market_data/database/scada_bridge), `POST /connectors/{id}/{test,activate,disable}` |
+| Connector Studio | `GET/POST /connectors` (incl. `kind`: generic/market_energy_purchase/scada/iot/database/data_table), `POST /connectors/{id}/{test,activate,disable,ingest}` (`ingest`: `data_table` only — fetches+parses `endpoint_url` as telemetry) |
 | Policy Studio | `GET/PUT /governance/autonomy-policy`, `GET/PUT /governance/objective-policy`, `POST /governance/e-stop` |
 | Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
 | Agent Observability | `GET /observability/summary`, `GET /observability/agent-calls`, `GET/POST /observability/eval-runs[/run]` |
 | Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` (Excel export includes an "Actions" sheet) |
 | Tenant Administration | `GET/POST /admin/users`, `GET/POST /admin/tenants` |
 | Platform Operations | rollups over the above; no dedicated endpoint |
-| Document Intake | `POST /ingestion/documents`, `GET /ingestion/documents`, `POST /ingestion/documents/{id}/apply-constraint` |
-| — (all pages) | `POST /auth/login`, `GET /auth/me`, `POST /ingestion/files` |
+| Document Intake | Multi-file upload, routed per extension: `POST /ingestion/documents` (.pdf/.png/.jpg/.jpeg, vision) and `POST /ingestion/files` (.csv/.json/.xlsx/.xlsm, structured) — either one auto-starts the tenant if idle (see Portfolio Operations); also `GET /ingestion/documents`, `POST /ingestion/documents/{id}/apply-constraint` |
+| — (all pages) | `POST /auth/login`, `GET /auth/me` |
 
 ## Decision cycle (FRD §3.1)
 

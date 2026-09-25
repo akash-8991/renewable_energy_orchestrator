@@ -55,18 +55,45 @@ documented limits rather than silent gaps:
   end: render → extract → persist → audit → apply → optimizer derate, confirmed against live DB
   data) and via unit tests; not verified against a real photographed document with real API calls.
 
-## Known tracked item: Connector Studio is a registration surface, not a live data path
+## Known tracked item: Connector Studio is a registration surface for five of six kinds
 
-`GET/POST /connectors` (SSRF-hardened, vaulted credentials, maker-checker) now categorises a
-connector's `kind` (`generic`/`market_data`/`database`/`scada_bridge`), but registering one still
-only does what it always did: store config, run a reachability test, and gate activation. Grepping
-the codebase confirms nothing outside `routers/connectors.py` reads a `Connector` row — `forecast.py`'s
-price series is a synthetic diurnal model, and `ot-gateway-sim` has no reference to `Connector` at
-all. Wiring a `market_data` connector into `forecast.py`'s price forecast, a `database` connector
-into a real query path, or a `scada_bridge` connector into `ot-gateway-sim`'s dispatch path are each
-a distinct, non-trivial feature (scheduled polling/caching, protocol-specific validation, and for
-SCADA a full safety review) — deliberately not attempted as a same-session bolt-on. See
+`GET/POST /connectors` (SSRF-hardened, vaulted credentials, maker-checker) categorises a
+connector's `kind` (`generic`/`market_energy_purchase`/`scada`/`iot`/`database`/`data_table`).
+Five of the six still only do what they always did: store config, run a reachability test, and
+gate activation. Grepping the codebase confirms nothing outside `routers/connectors.py` reads a
+`Connector` row for these kinds — `forecast.py`'s price series is a synthetic diurnal model, and
+`ot-gateway-sim` has no reference to `Connector` at all. Wiring a `market_energy_purchase`
+connector into `forecast.py`'s price forecast, an `iot` connector into replacing the
+edge-simulator's synthetic sensor feed, or a `scada` connector into `ot-gateway-sim`'s dispatch
+path are each a distinct, non-trivial feature (scheduled polling/caching, protocol-specific
+validation, and for SCADA a full safety review) — deliberately not attempted as a same-session
+bolt-on, and **`scada` specifically never will be**: doc 05's non-negotiable architecture keeps
+OT command dispatch on the independent, safety-critical `ot-gateway-sim` path exclusively, so a
+user-registered SCADA connector deliberately has no route into real command execution regardless
+of its activation status, by design, not by omission.
+
+The sixth kind, `data_table`, is different: `POST /connectors/{id}/ingest` (an active connector
+only) fetches its `endpoint_url` and parses+publishes it as real telemetry, through the identical
+`parse_telemetry_file()`/`publish_readings()` path a CSV/JSON/XLSX file upload already goes
+through — this one is a genuine, working data path, not registration-only. See
 `PRODUCTION_READINESS_REVIEW.md` §4 item 2/8.
+
+## Portfolio-wide start/stop gate
+
+Requested behaviour: the dashboard should not show live cards/decisions until an operator
+explicitly starts analysis, and starting should require an actual connected data source first.
+Implemented as `Tenant.operating_state` (`idle`|`running`, default `idle`) — `policy/cycle.py`
+skips the decision cycle entirely for an idle tenant (the same early-return already used for "no
+portfolio seeded yet"), and `GET/POST /operations/{status,start,stop}` exposes it. `start` 400s
+unless at least one connector is `active` or at least one document has been ingested
+(`has_data_source` in the status response). A successful ingestion in either Document Intake path
+(`/ingestion/files` or `/ingestion/documents`) also auto-starts the tenant if it was idle — see
+`mark_started_if_idle()` in `backend/app/routers/operations.py` — so uploading a dataset doesn't
+require a separate manual Start click, matching the literal request that ingesting a document
+should "initiate analysis and operation." The edge-simulator keeps publishing synthetic telemetry
+regardless of this gate (a utility's sensor layer runs independently of whether anyone's currently
+making decisions on top of it) — the gate controls the *decision cycle and dashboard display*,
+not the underlying telemetry stream.
 
 ## Known tracked item: agent observability/eval is real but demo-scale
 

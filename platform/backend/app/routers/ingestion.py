@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from output.audit import append_audit_event
 from reo_common.events import EventBus
 from reo_common.model_gateway import GatewayError, get_model_gateway
-from models.canonical import Asset, Constraint, DocumentIntake
+from models.canonical import Asset, Constraint, DocumentIntake, Tenant
 from evaluation.observability import persist_call_record
 from reo_common.security import AuthContext
 from sqlalchemy import select
@@ -24,6 +24,7 @@ from ..ingestion.document_ingest import (
     render_pages,
 )
 from ..ingestion.file_ingest import parse_telemetry_file, publish_readings
+from .operations import mark_started_if_idle
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 log = logging.getLogger("api.routers.ingestion")
@@ -46,7 +47,7 @@ class FileIngestResponse(BaseModel):
 
 @router.post("/files", response_model=FileIngestResponse)
 async def upload_telemetry_file(
-    file: UploadFile, ctx: AuthContext = Depends(require_permission("ingest:files"))
+    file: UploadFile, ctx: AuthContext = Depends(require_permission("ingest:files")), db: Session = Depends(db_session)
 ) -> FileIngestResponse:
     content = await file.read()
     if len(content) > 25 * 1024 * 1024:
@@ -60,6 +61,12 @@ async def upload_telemetry_file(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "no valid rows found (expected columns: asset_id, metric, event_time, value, unit)")
 
     lineage_id = publish_readings(_get_bus(), ctx.tenant_id, readings)
+
+    tenant = db.execute(select(Tenant).where(Tenant.id == ctx.tenant_id)).scalar_one_or_none()
+    if tenant is not None:
+        mark_started_if_idle(db, tenant, actor_id=ctx.user_id, actor_label=ctx.email, reason=f"file:{file.filename}")
+        db.commit()
+
     return FileIngestResponse(lineage_id=lineage_id, rows_queued=len(readings), filename=file.filename or "upload")
 
 
@@ -153,6 +160,9 @@ async def upload_document(
         event_type="document.ingested",
         payload={"document_id": row.id, "filename": filename, "document_type": row.document_type, "checksum": row.checksum},
     )
+    tenant = db.execute(select(Tenant).where(Tenant.id == ctx.tenant_id)).scalar_one_or_none()
+    if tenant is not None:
+        mark_started_if_idle(db, tenant, actor_id=ctx.user_id, actor_label=ctx.email, reason=f"document:{filename}")
     db.commit()
     return DocumentIntakeResponse.from_row(row)
 

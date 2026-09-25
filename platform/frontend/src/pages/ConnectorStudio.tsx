@@ -11,10 +11,18 @@ interface Connector {
 
 const KIND_OPTIONS = [
   { value: "generic", label: "Generic API", help: "Any external REST endpoint — an ERP/CRM webhook, a notification service, a custom integration." },
-  { value: "market_data", label: "Market data / energy procurement", help: "A power exchange or aggregator's price/trading API. Registers and reachability-tests the endpoint — it is not yet wired to replace the optimizer's synthetic price forecast (see ARCHITECTURE.md)." },
+  { value: "market_energy_purchase", label: "Market energy purchase API", help: "A power exchange/aggregator's price or trading API, for agents to act on. Registers and reachability-tests the endpoint — it is not yet wired to replace the optimizer's synthetic price forecast (see ARCHITECTURE.md)." },
+  { value: "scada", label: "SCADA API", help: "An external SCADA/OPC-UA gateway. Registers and reachability-tests the endpoint — live OT dispatch always goes through the separate, safety-critical ot-gateway-sim path, never a registered connector, regardless of activation status." },
+  { value: "iot", label: "IoT API", help: "A device/sensor platform (smart meters, edge gateways). Registers and reachability-tests the endpoint — not yet wired to replace the edge-simulator's synthetic telemetry." },
   { value: "database", label: "Database", help: "A database reachable over HTTP (e.g. a PostgREST/REST facade). This is still an HTTP endpoint under the hood — a raw DB driver connection string isn't supported here." },
-  { value: "scada_bridge", label: "SCADA / OT bridge", help: "An external SCADA/OPC-UA gateway. Registers and reachability-tests the endpoint — live OT dispatch still goes through the separate, safety-critical ot-gateway-sim path, not this connector." },
+  { value: "data_table", label: "Data table (path/link)", help: "A CSV/JSON/XLSX URL — once active, \"Ingest now\" fetches it and publishes it as real telemetry, the same validated path a file upload goes through. The one kind here with a real effect, not registration-only." },
 ];
+
+// Matches backend/app/routers/operations.py's has_data_source check exactly
+// (any active connector, regardless of kind) — this used to be narrower
+// (excluding "generic") and disagreed with what Start Optimizer actually
+// required, so the hint below could claim no data source was connected
+// while Start was already enabled.
 
 export default function ConnectorStudio() {
   const qc = useQueryClient();
@@ -24,6 +32,7 @@ export default function ConnectorStudio() {
   const [url, setUrl] = useState("https://");
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [ingestMessage, setIngestMessage] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<Connector[]>({
     queryKey: ["connectors"],
@@ -31,7 +40,10 @@ export default function ConnectorStudio() {
     refetchInterval: 15000,
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["connectors"] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["connectors"] });
+    qc.invalidateQueries({ queryKey: ["operations-status"] });
+  };
 
   const create = useMutation({
     mutationFn: async () =>
@@ -61,11 +73,18 @@ export default function ConnectorStudio() {
     onError: (err: any) => setError(err?.response?.data?.detail || "Activation failed"),
   });
   const disable = useMutation({ mutationFn: async (id: string) => (await api.post(`/connectors/${id}/disable`)).data, onSuccess: invalidate });
+  const ingest = useMutation({
+    mutationFn: async (id: string) => (await api.post(`/connectors/${id}/ingest`)).data,
+    onSuccess: (result) => { setIngestMessage(`${result.rows_queued} reading(s) queued for ingestion.`); invalidate(); },
+    onError: (err: any) => setError(err?.response?.data?.detail || "Ingest failed"),
+  });
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     create.mutate();
   }
+
+  const isDataTable = kind === "data_table";
 
   return (
     <div>
@@ -74,10 +93,13 @@ export default function ConnectorStudio() {
         <button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancel" : "+ New connector"}</button>
       </div>
       <p className="muted">
-        Register a client API endpoint and authentication. Credentials go straight to the secrets vault and are never
-        shown again. Activation requires a different user than the one who created it (maker-checker).
+        Register the APIs agents use to act on the outside world — a market energy purchase API, a SCADA API, an
+        IoT device API — or a data table path/link for the platform to ingest as telemetry. Credentials go
+        straight to the secrets vault and are never shown again. Activation requires a different user than the
+        one who created it (maker-checker).
       </p>
       {error && <div className="error-banner">{error}</div>}
+      {ingestMessage && <div className="evidence-box"><div className="finding">{ingestMessage}</div></div>}
       {showForm && (
         <form onSubmit={onSubmit} className="card" style={{ marginBottom: 16 }}>
           <div className="field">
@@ -96,8 +118,14 @@ export default function ConnectorStudio() {
             </p>
           </div>
           <div className="field">
-            <label>Endpoint URL</label>
-            <input value={url} onChange={(e) => setUrl(e.target.value)} required style={{ width: "100%" }} />
+            <label>{isDataTable ? "Data path / link (.csv, .json or .xlsx URL)" : "Endpoint URL"}</label>
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              required
+              placeholder={isDataTable ? "https://example.com/exports/telemetry.csv" : undefined}
+              style={{ width: "100%" }}
+            />
           </div>
           <div className="field">
             <label>API key (optional — stored encrypted, never shown again)</label>
@@ -125,6 +153,11 @@ export default function ConnectorStudio() {
                   {c.status !== "active" && c.status !== "disabled" && (
                     <button onClick={() => activate.mutate(c.id)} disabled={activate.isPending}>Activate</button>
                   )}
+                  {c.kind === "data_table" && c.status === "active" && (
+                    <button onClick={() => ingest.mutate(c.id)} disabled={ingest.isPending}>
+                      {ingest.isPending ? "Ingesting..." : "Ingest now"}
+                    </button>
+                  )}
                   {c.status !== "disabled" && (
                     <button className="danger" onClick={() => disable.mutate(c.id)} disabled={disable.isPending}>Disable</button>
                   )}
@@ -134,6 +167,12 @@ export default function ConnectorStudio() {
           </tbody>
         </table>
         </div>
+      )}
+      {data && data.length > 0 && data.every((c) => c.status !== "active") && (
+        <p className="muted" style={{ fontSize: 11, marginTop: 10 }}>
+          No active data-source connector yet — Portfolio Operations' Start Optimizer needs at least one active
+          connector here (or a document/dataset ingested in Document Intake) before it can begin.
+        </p>
       )}
     </div>
   );

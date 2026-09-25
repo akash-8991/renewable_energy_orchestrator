@@ -119,6 +119,14 @@ class Tenant(Base):
     units: Mapped[str] = mapped_column(String(10), default="metric")
     retention_years: Mapped[int] = mapped_column(Integer, default=7)
     quotas: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # idle|running — gates the optimizer-worker decision cycle (policy/cycle.py
+    # skips tenants that aren't "running", the same "not ready yet" pattern
+    # already used for a missing portfolio) and what the dashboard shows
+    # (Portfolio Operations renders an idle state instead of live cards).
+    # Defaults to idle: a fresh deploy/reset does not start making decisions
+    # on its own — see backend/app/routers/operations.py.
+    operating_state: Mapped[str] = mapped_column(String(20), default="idle")
+    operating_state_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -593,7 +601,7 @@ class Connector(Base):
     id: Mapped[str] = uuid_pk()
     tenant_id: Mapped[str] = tenant_fk()
     name: Mapped[str] = mapped_column(String(160))
-    kind: Mapped[str] = mapped_column(String(30), default="generic")  # generic|market_data|database|scada_bridge — categorises what the endpoint is for; see ARCHITECTURE.md for what's actually wired to live data vs registration-only
+    kind: Mapped[str] = mapped_column(String(30), default="generic")  # generic|market_energy_purchase|scada|iot|database|data_table — categorises what the endpoint is for; see ARCHITECTURE.md for what's actually wired to live data vs registration-only. data_table is the one kind with a real effect: POST /connectors/{id}/ingest fetches endpoint_url and parses+publishes it as telemetry (backend/app/routers/connectors.py), same path as a file upload.
     endpoint_url: Mapped[str] = mapped_column(String(500))
     method: Mapped[str] = mapped_column(String(10), default="POST")
     headers: Mapped[dict] = mapped_column(JSONB, default=dict)

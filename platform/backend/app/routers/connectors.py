@@ -8,12 +8,13 @@ and requires no counter-approval.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from output.audit import append_audit_event
-from models.canonical import Connector, CredentialRef
+from models.canonical import Connector, CredentialRef, Tenant
 from reo_common.secrets import get_secrets_provider
 from reo_common.security import AuthContext
 from guardrails.ssrf import check_outbound_url
@@ -21,13 +22,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..deps import db_session, require_permission
+from ..ingestion.file_ingest import parse_telemetry_file, publish_readings
+from .operations import mark_started_if_idle
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
 
 
 class ConnectorCreateRequest(BaseModel):
     name: str
-    kind: Literal["generic", "market_data", "database", "scada_bridge"] = "generic"
+    kind: Literal["generic", "market_energy_purchase", "scada", "iot", "database", "data_table"] = "generic"
     endpoint_url: str
     method: str = "POST"
     headers: dict = {}
@@ -182,3 +185,78 @@ def disable_connector(
                         event_type="connector.disabled", payload={"connector_id": connector.id})
     db.commit()
     return _to_summary(db, connector)
+
+
+# ---------------------------------------------------------------------------
+# data_table ingestion — the one connector kind that's actually wired to a
+# real effect. A market_energy_purchase/scada/iot connector registers and
+# reachability-tests its endpoint (same as before, see ARCHITECTURE.md for
+# what's registration-only vs live); a data_table connector's endpoint_url
+# is instead fetched and parsed as a telemetry file, through the identical
+# parse_telemetry_file()/publish_readings() path a CSV/JSON/XLSX upload
+# already goes through in ingestion.py — same validation, same quarantine
+# path, same canonical reading shape (asset_id/metric/event_time/value/unit)
+# is expected.
+# ---------------------------------------------------------------------------
+
+
+class ConnectorIngestResponse(BaseModel):
+    lineage_id: str
+    rows_queued: int
+
+
+@router.post("/{connector_id}/ingest", response_model=ConnectorIngestResponse)
+def ingest_connector(
+    connector_id: str, ctx: AuthContext = Depends(require_permission("manage:connectors")), db: Session = Depends(db_session)
+) -> ConnectorIngestResponse:
+    connector = db.execute(select(Connector).where(Connector.id == connector_id)).scalar_one_or_none()
+    if connector is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "connector not found")
+    if connector.kind != "data_table":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"kind={connector.kind!r} is registration/reachability-test only — only data_table connectors ingest")
+    if connector.status != "active":
+        raise HTTPException(status.HTTP_409_CONFLICT, f"connector must be active to ingest (currently {connector.status}) — test then activate it first")
+
+    ssrf_result = check_outbound_url(connector.endpoint_url)
+    if not ssrf_result.allowed:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"endpoint rejected by egress policy: {ssrf_result.reason}")
+
+    filename = Path(connector.endpoint_url.split("?")[0]).name or "connector-data"
+    if Path(filename).suffix.lower() not in (".csv", ".json", ".xlsx", ".xlsm"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"endpoint_url must end in .csv/.json/.xlsx (got {filename!r}) — same file-type support as a Document Intake upload",
+        )
+
+    import httpx
+
+    try:
+        with httpx.Client(timeout=connector.timeout_seconds) as client:
+            # Always GET regardless of the connector's own `method` field
+            # (default "POST", meaningful for an action-invoking connector)
+            # — this is a data fetch, not an action call.
+            resp = client.get(connector.endpoint_url, headers=connector.headers)
+            resp.raise_for_status()
+            content = resp.content
+    except httpx.HTTPError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"could not fetch {connector.endpoint_url}: {exc}") from exc
+
+    try:
+        readings = parse_telemetry_file(filename, content)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    if not readings:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no valid rows found (expected columns: asset_id, metric, event_time, value, unit)")
+
+    from reo_common.events import EventBus
+
+    lineage_id = publish_readings(EventBus(), ctx.tenant_id, readings, lineage_id=f"connector:{connector.id}")
+
+    tenant = db.execute(select(Tenant).where(Tenant.id == ctx.tenant_id)).scalar_one_or_none()
+    if tenant is not None:
+        mark_started_if_idle(db, tenant, actor_id=ctx.user_id, actor_label=ctx.email, reason=f"connector:{connector.name}")
+
+    append_audit_event(db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
+                        event_type="connector.ingested", payload={"connector_id": connector.id, "rows_queued": len(readings)})
+    db.commit()
+    return ConnectorIngestResponse(lineage_id=lineage_id, rows_queued=len(readings))

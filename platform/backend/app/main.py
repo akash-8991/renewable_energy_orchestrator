@@ -18,6 +18,7 @@ from .routers import (
     health,
     ingestion,
     observability,
+    operations,
     signals,
     simulation,
     twin,
@@ -71,3 +72,4 @@ app.include_router(signals.router)
 app.include_router(actions.router)
 app.include_router(observability.router)
 app.include_router(customers.router)
+app.include_router(operations.router)

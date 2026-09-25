@@ -83,13 +83,35 @@ def wait_for_tick(seconds: float = 12.0) -> None:
 def run(base_url: str) -> int:
     demo = Demo(base_url)
 
-    with demo.step(1, "Baseline — live portfolio and 24h plan") as d:
+    with demo.step(1, "Baseline — connect a data source, start the optimizer, live portfolio and 24h plan") as d:
         headers = d.as_user("tenant.admin@demo-utility.test")
         portfolio = d.client.get("/twin/portfolio", headers=headers).json()
         d.check(len(portfolio) > 0, f"portfolio snapshot returned ({len(portfolio)} portfolio(s))")
 
+        status = d.client.get("/operations/status", headers=headers).json()
+        d.check(status["operating_state"] == "idle", "optimizer starts idle on a fresh/cleared database")
+
+        # The real Connector Studio -> Portfolio Operations flow: register a
+        # connector (maker), a *different* user activates it (checker —
+        # platform.admin also carries the tenant_admin role, same as any
+        # real second admin account would), then Start Optimizer unlocks.
+        connector = d.client.post(
+            "/connectors",
+            json={"name": "Demo data source", "kind": "generic", "endpoint_url": "https://example.com", "method": "GET"},
+            headers=headers,
+        ).json()
+        d.client.post(f"/connectors/{connector['id']}/test", headers=headers)
+        checker_headers = d.as_user("platform.admin@demo-utility.test")
+        activated = d.client.post(f"/connectors/{connector['id']}/activate", headers=checker_headers).json()
+        d.check(activated["status"] == "active", "data-source connector registered, tested and activated by a different user (maker-checker)")
+
+        status = d.client.get("/operations/status", headers=headers).json()
+        d.check(status["has_data_source"] is True, "Start Optimizer is now unlocked (has_data_source=true)")
+        started = d.client.post("/operations/start", headers=headers).json()
+        d.check(started["operating_state"] == "running", "optimizer started")
+
         # optimizer-worker retries every ~10s until its first successful
-        # cycle (see worker.py's RETRY_SECONDS) but on a freshly-seeded
+        # cycle (see worker.py's RETRY_SECONDS) but on a freshly-started
         # tenant that first success can still be a few seconds away —
         # poll rather than assume a decision already exists.
         decisions = []

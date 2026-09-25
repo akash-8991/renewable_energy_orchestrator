@@ -110,14 +110,20 @@ maker-checker enforced (creator ≠ activator). **What it never did: connect to 
 the whole codebase confirmed zero non-router code path reads a `Connector` row — `forecast.py`'s
 price series is a synthetic sine wave, `ot-gateway-sim` has no reference to `Connector` at all.
 
-Fixed the honest part of this gap: added a `kind` field (`generic` / `market_data` / `database` /
-`scada_bridge`) so the page is now explicitly organised around these three use cases, with
-inline UI copy that states plainly what's validated (SSRF + HTTP reachability) versus what isn't
-(no live pipeline wiring yet) for each kind. **Deliberately did not** fake a deeper integration —
-adding real live-price ingestion, a real DB query path, or real OPC-UA dispatch through this UI
-would each be its own multi-day feature (scheduled polling/caching, protocol-specific validation,
-safety review for anything touching OT), not a same-session bolt-on. Recorded as the top follow-up
-item below rather than half-built.
+Fixed the honest part of this gap: added a `kind` field (`generic` / `market_energy_purchase` /
+`scada` / `iot` / `database` / `data_table`) so the page is now explicitly organised around these
+use cases, with inline UI copy that states plainly what's validated (SSRF + HTTP reachability)
+versus what isn't (no live pipeline wiring yet) for each kind. **Deliberately did not** fake a
+deeper integration for five of the six — adding real live-price ingestion, a real DB query path,
+or real OPC-UA dispatch through this UI would each be its own multi-day feature (scheduled
+polling/caching, protocol-specific validation, safety review for anything touching OT), not a
+same-session bolt-on, and `scada` never will connect to real dispatch regardless of effort
+available — doc 05's architecture keeps that on `ot-gateway-sim` exclusively, by design. A later
+session did wire the sixth, `data_table`: `POST /connectors/{id}/ingest` fetches and parses its
+`endpoint_url` as telemetry, the same validated path a file upload goes through — see
+`SIMPLIFICATIONS.md`'s "Portfolio-wide start/stop gate" section for the fuller picture (this also
+now gates the dashboard/decision cycle behind an explicit Start, requiring a connected data source
+first).
 
 ### Per-action ticket log, exportable
 
@@ -153,8 +159,9 @@ Roughly in the order a real deployment would need them:
    down Anthropic API degrades a decision cycle gracefully instead of just running long.
 7. **Expand the eval harness** with a real labelled corpus once real usage data exists to draw one
    from.
-8. **Wire a `market_data`/`database`/`scada_bridge` Connector into the actual data path** it's
-   now explicitly categorised for, once one is registered against a real endpoint.
+8. **Wire a `market_energy_purchase`/`database`/`iot` Connector into the actual data path** it's
+   now explicitly categorised for, once one is registered against a real endpoint (`data_table` is
+   done; `scada` is deliberately excluded from this list — see above).
 
 None of these are hidden — each is either already flagged in `SIMPLIFICATIONS.md` or added there/
 here by this review. The platform's own standing practice (documented in every prior commit
