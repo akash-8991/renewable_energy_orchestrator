@@ -5,6 +5,7 @@ description = "Shared canonical models, schemas, auth, tenancy, model gateway an
 requires-python = ">=3.11"
 dependencies = [
     "sqlalchemy>=2.0",
+    "greenlet>=3.0",  # required by sqlalchemy.ext.asyncio at import time (db.py imports it unconditionally); previously satisfied only transitively, which a fresh pip resolve isn't guaranteed to do
     "asyncpg>=0.29",
     "psycopg2-binary>=2.9",
     "pydantic>=2.6",

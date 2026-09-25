@@ -33,6 +33,7 @@ _stop_event = threading.Event()
 _KNOWN_METRICS = {
     "power_kw", "soc_pct", "temperature_c", "irradiance_w_m2", "wind_speed_ms",
     "market_price_gbp_per_mwh", "frequency_hz", "net_import_kw",
+    "curtailment_kw", "shed_kw",  # written by ot-gateway-sim on a committed curtail/demand_response command
 }
 
 

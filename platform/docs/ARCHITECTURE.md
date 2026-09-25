@@ -38,7 +38,7 @@ engine and (for anything but the lowest-risk bounded actions) a human approval.
 | Service | Primary spec sections | Canonical entities it owns |
 |---|---|---|
 | `apps/api` | FRD (all modules), TRD §11 (platform services), doc 05 §10 (platform architecture extension) | Tenant, User, Portfolio, Site, Asset, Battery, Decision, Action, Approval, Connector, CredentialRef, ExportJob, AuditEvent |
-| `apps/optimizer-worker` | TRD §4 (optimisation requirements), doc 05 ADR-001 | reads Constraint/ObjectivePolicy/Forecast, writes Decision.plan |
+| `apps/optimizer-worker` | TRD §4 (optimisation requirements), doc 05 ADR-001, hackathon problem 4 F1/F3 | reads Constraint/ObjectivePolicy/Forecast, writes Decision.plan, Action, ScenarioRun |
 | `apps/agent-worker` | doc 07 (Prompt and Agent Design, in full) | writes Decision.reasoning, Decision.risk_flags |
 | `apps/ot-gateway-sim` | doc 05 §7 (Safety architecture), TR-OT-01 | writes Command, updates Signal.state |
 | `apps/edge-simulator` | BRD reference portfolio (5 solar/3 wind/2 BESS), TRD §7 (industrial protocols) | writes Telemetry |
@@ -72,11 +72,11 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Workspace (web) | Primary endpoints |
 |---|---|
 | Portfolio Operations | `GET /twin/portfolio`, `GET /twin/batteries`, `GET /twin/assets/{id}/telemetry` |
-| Decision Centre | `GET /decisions`, `GET /decisions/{id}` |
+| Decision Centre | `GET /decisions`, `GET /decisions/{id}`, `GET /decisions/{id}/scenario-runs` |
 | Approval Inbox | `GET /governance/approvals`, `POST /governance/approvals/{id}/decide` |
 | Live Signal Monitor | `GET /signals` |
 | Connector Studio | `GET/POST /connectors`, `POST /connectors/{id}/{test,activate,disable}` |
-| Policy Studio | `GET/PUT /governance/autonomy-policy`, `POST /governance/e-stop` |
+| Policy Studio | `GET/PUT /governance/autonomy-policy`, `GET/PUT /governance/objective-policy`, `POST /governance/e-stop` |
 | Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
 | Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` |
 | Tenant Administration | `GET/POST /admin/users`, `GET/POST /admin/tenants` |
@@ -89,9 +89,33 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 2. Data-quality agent assesses the trusted snapshot; twin state is locked.
 3. Forecast + scenario services produce trajectories for the horizon.
 4. Optimizer computes a feasible plan; the independent validator re-checks it.
-5. Risk/Critic agent challenges the plan.
-6. Policy/safety engine assigns disposition per the tenant's autonomy mode.
-7. Decision Ledger persists the versioned record with full evidence.
-8. If approval-gated, the Approval Workflow waits for a valid, unexpired approval.
-9. `ot-gateway-sim` independently re-validates immediately pre-dispatch, then simulates execution.
-10. Telemetry reconciliation measures the actual outcome; KPIs and audit update.
+5. A risk-averse alternative is solved against the conservative tail of the forecast band, and a
+   forward-looking comparison across all six named scenarios is solved and persisted as
+   `ScenarioRun` rows (`scenario_lab.py`) — before anything happens for real.
+6. Governed `Action` rows are created for every action family the plan actually uses — battery
+   charge/discharge, grid buy/sell, renewable curtailment, demand response (`actions_builder.py`) —
+   not just batteries.
+7. Risk/Critic agent challenges the plan.
+8. Policy/safety engine assigns disposition per the tenant's autonomy mode.
+9. Decision Ledger persists the versioned record with full evidence.
+10. If approval-gated, the Approval Workflow waits for a valid, unexpired approval.
+11. `ot-gateway-sim` independently re-validates immediately pre-dispatch, then simulates execution.
+12. Telemetry reconciliation measures the actual outcome; KPIs and audit update.
+
+## Hackathon problem 4 alignment (F1/F2/F3)
+
+Three gaps identified against the ET AI Hackathon's Problem 4 solution-feature ladder were closed
+after the initial build (see memory/session history for the full gap analysis):
+
+- **F1** ("determine optimal cluster of actions") was already met; `test_actions_builder.py`'s
+  `test_a_full_coordinated_cycle_produces_one_action_per_family` is the regression test for it.
+- **F2** ("optimal cluster of options after determining optimality criteria... adjusting for
+  uncertainty") needed a way to actually *set* the optimality criteria, not just have the optimizer
+  apply a fixed set from seed time — `GET/PUT /governance/objective-policy` (Policy Studio) now
+  lets a portfolio_manager change the weighted objective, carbon price, and risk-aversion at
+  runtime, versioned so past decisions keep the criteria that governed them.
+- **F3** ("simulate situation/scenario over a period of time accounting for potential variations")
+  needed a genuine forward-looking what-if capability, not just the Simulation Lab's live shock
+  injection into the real-time simulator. `scenario_lab.py` re-solves the same 24h horizon under
+  each of the six named scenarios every cycle and persists the comparison (`ScenarioRun`), surfaced
+  in the Decision Centre drawer's "Scenario Comparison" tab.

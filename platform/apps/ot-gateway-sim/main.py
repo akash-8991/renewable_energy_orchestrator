@@ -76,6 +76,41 @@ def _is_estopped(tenant_id: str) -> bool:
     return _redis.get(f"{ESTOP_KEY_PREFIX}{tenant_id}") == "1"
 
 
+def _telemetry_effect(command_type: str, setpoint_value: float) -> tuple[str, float]:
+    """Which metric a committed command writes, and with what sign.
+
+    charge/discharge write `power_kw` — the same metric edge-simulator's
+    own battery heuristic writes, since a real deployment has exactly one
+    physical meter per asset, not two independent producers. That overlap
+    is a known, accepted simplification (see docs/SIMPLIFICATIONS.md): the
+    edge-simulator's autonomous battery cycle keeps running regardless of
+    dispatched commands, so both threads append readings — realistic
+    enough for a demo, not a fully resolved single-source-of-truth model.
+
+    buy/sell write `net_import_kw`, matching the grid asset's existing
+    telemetry convention (positive = importing).
+
+    curtail/demand_response deliberately do NOT touch `power_kw` — that
+    would fight edge-simulator's own live generation/demand simulation for
+    that same asset every tick. They write dedicated informational metrics
+    instead, confirming the command took effect without overwriting the
+    asset's primary reading.
+    """
+    if command_type == "charge":
+        return "power_kw", setpoint_value
+    if command_type == "discharge":
+        return "power_kw", -setpoint_value
+    if command_type == "buy":
+        return "net_import_kw", setpoint_value
+    if command_type == "sell":
+        return "net_import_kw", -setpoint_value
+    if command_type == "curtail":
+        return "curtailment_kw", setpoint_value
+    if command_type == "demand_response":
+        return "shed_kw", setpoint_value
+    return "power_kw", setpoint_value
+
+
 def _independent_validate(req: CommandRequest) -> tuple[bool, str | None]:
     now = datetime.now(timezone.utc)
 
@@ -101,20 +136,35 @@ def _independent_validate(req: CommandRequest) -> tuple[bool, str | None]:
             if asset is None:
                 return False, "asset not found in registry"
 
-            latest_soc = db.execute(
+            # Freshness/quality check applies to every command type, not
+            # just batteries: a curtailment, grid buy/sell, or demand-
+            # response setpoint is just as unsafe to act on if the asset's
+            # last-known state is stale or already flagged bad. Look at
+            # whichever metric that asset actually reports (power_kw for
+            # everything except batteries, which also report soc_pct).
+            latest_reading = db.execute(
                 select(Telemetry)
-                .where(Telemetry.asset_id == req.asset_id, Telemetry.metric == "soc_pct")
+                .where(Telemetry.asset_id == req.asset_id)
                 .order_by(Telemetry.event_time.desc())
                 .limit(1)
             ).scalar_one_or_none()
 
-            if latest_soc is not None:
-                age = (now - latest_soc.event_time).total_seconds()
-                if age > 300 or latest_soc.quality == "bad":
-                    return False, f"asset state is stale/bad (age={age:.0f}s, quality={latest_soc.quality}) — refusing to command on untrusted state"
+            if latest_reading is not None:
+                age = (now - latest_reading.event_time).total_seconds()
+                if age > 300 or latest_reading.quality == "bad":
+                    return False, f"asset state is stale/bad (age={age:.0f}s, quality={latest_reading.quality}) — refusing to command on untrusted state"
 
+            # Battery-specific SoC-proximity check, in addition to the
+            # generic freshness check above.
+            if req.command_type in ("charge", "discharge"):
                 battery = db.execute(select(Battery).where(Battery.asset_id == req.asset_id)).scalar_one_or_none()
-                if battery is not None:
+                latest_soc = db.execute(
+                    select(Telemetry)
+                    .where(Telemetry.asset_id == req.asset_id, Telemetry.metric == "soc_pct")
+                    .order_by(Telemetry.event_time.desc())
+                    .limit(1)
+                ).scalar_one_or_none()
+                if battery is not None and latest_soc is not None:
                     if req.command_type == "discharge" and latest_soc.value <= battery.soc_min_pct + 1:
                         return False, f"battery SoC {latest_soc.value:.1f}% too close to minimum {battery.soc_min_pct}% for a discharge command"
                     if req.command_type == "charge" and latest_soc.value >= battery.soc_max_pct - 1:
@@ -148,12 +198,13 @@ def commit(req: CommandRequest) -> CommandResponse:
         log.warning("simulated SCADA ack failure for signal=%s (demo fault injection)", req.signal_id)
         return CommandResponse(acknowledged=False, reason="simulated SCADA acknowledgement timeout", checked_at=datetime.now(timezone.utc).isoformat())
 
+    metric, value = _telemetry_effect(req.command_type, req.setpoint_value)
     db = SessionLocal()
     try:
         with break_glass_cross_tenant():
             stmt = pg_insert(Telemetry).values(
-                tenant_id=req.tenant_id, asset_id=req.asset_id, metric="power_kw",
-                event_time=datetime.now(timezone.utc), value=req.setpoint_value if req.command_type == "charge" else -req.setpoint_value,
+                tenant_id=req.tenant_id, asset_id=req.asset_id, metric=metric,
+                event_time=datetime.now(timezone.utc), value=value,
                 unit=req.unit, quality="good", source="ot-gateway-sim",
             ).on_conflict_do_nothing(constraint="uq_telemetry_reading")
             db.execute(stmt)

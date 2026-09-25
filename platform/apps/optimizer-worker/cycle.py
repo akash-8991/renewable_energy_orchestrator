@@ -19,12 +19,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from actions_builder import AssetRef, build_actions_for_step
 from forecast import generate_and_persist_forecasts
-from reo_common.autonomy import autonomous_execution_allowed, classify_risk, resolve_autonomy_mode
+from reo_common.autonomy import autonomous_execution_allowed, resolve_autonomy_mode
 from reo_common.config import get_settings
 from reo_common.db import SessionLocal, break_glass_cross_tenant
 from reo_common.events import CloudEvent, EventBus, STREAM_DECISION_READY, new_correlation_id
 from reo_common.execution import build_signal_for_action, dispatch_signal
+from scenario_lab import ScenarioInputs, run_scenario_comparison
 from reo_common.models import (
     Approval,
     Asset,
@@ -108,9 +110,9 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
                 if asset.asset_type in ("solar", "wind", "consumer"):
                     series = _load_forecast_series(db, tenant_id, asset.id, now, n_steps, STEP_HOURS)
                     if asset.asset_type == "solar":
-                        solar_inputs.append(GenAssetInput(asset_id=asset.id, forecast_kw=series.q50))
+                        solar_inputs.append(GenAssetInput(asset_id=asset.id, forecast_kw=series.q50, rated_capacity_kw=asset.rated_capacity_kw))
                     elif asset.asset_type == "wind":
-                        wind_inputs.append(GenAssetInput(asset_id=asset.id, forecast_kw=series.q50))
+                        wind_inputs.append(GenAssetInput(asset_id=asset.id, forecast_kw=series.q50, rated_capacity_kw=asset.rated_capacity_kw))
                     else:
                         consumer_inputs.append(ConsumerInput(asset_id=asset.id, forecast_kw=series.q50))
 
@@ -183,6 +185,23 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             if stale_count > 0:
                 risk_flags.append(f"{stale_count} telemetry readings not fresh at snapshot time")
 
+            # Forward-looking scenario simulation (F3): re-solve the same
+            # horizon under each named variation, not just the risk-averse
+            # alternative above, and persist the comparison — this is what
+            # lets an operator see how the plan would change under a shock
+            # *before* it happens, not just react to one after the fact.
+            if status == "proposed":
+                try:
+                    scenario_runs = run_scenario_comparison(
+                        tenant_id=tenant_id, decision_cycle_id=correlation_id, n_steps=n_steps, step_hours=STEP_HOURS,
+                        base_inputs=ScenarioInputs(solar=solar_inputs, wind=wind_inputs, consumers=consumer_inputs, batteries=battery_inputs, grid=grid_input),
+                        weights=weights, base_result=base_result,
+                    )
+                    for run in scenario_runs:
+                        db.add(run)
+                except Exception:
+                    log.exception("scenario comparison failed for cycle %s (non-fatal, decision still proceeds)", correlation_id)
+
             # step 7: policy/safety engine resolves the effective mode for
             # this cycle (BR-05: no configured policy -> the conservative
             # OBSERVE default, never an implicit permissive one)
@@ -228,30 +247,16 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             db.add(decision)
             db.flush()
 
-            asset_by_id = {a.id: a for a in assets}
+            asset_by_id = {a.id: AssetRef(id=a.id, rated_capacity_kw=a.rated_capacity_kw) for a in assets}
             actions: list[Action] = []
             for s in base_result.steps[:1]:  # first step is the immediately actionable one; later steps stay in `plan` as the forward-looking schedule
-                for asset_id, v in s.batteries.items():
-                    asset = asset_by_id.get(asset_id)
-                    rated_kw = asset.rated_capacity_kw if asset else 0.0
-                    if v["charge_kw"] > 1.0:
-                        risk = classify_risk("charge", v["charge_kw"], rated_kw, decision.binding_constraints, asset_id)
-                        actions.append(Action(
-                            tenant_id=tenant_id, decision_id=decision.id, asset_id=asset_id, action_type="charge",
-                            quantity=v["charge_kw"], unit="kW", start_time=now, end_time=now + timedelta(hours=STEP_HOURS),
-                            envelope={"max_kw": v["charge_kw"]}, expiry=now + timedelta(minutes=APPROVAL_WINDOW_MINUTES),
-                            risk_level=risk, reason="optimizer: charge from surplus/low price window",
-                            expected_outcome={"soc_pct_after": v["soc_pct"]}, requires_approval=True,
-                        ))
-                    elif v["discharge_kw"] > 1.0:
-                        risk = classify_risk("discharge", v["discharge_kw"], rated_kw, decision.binding_constraints, asset_id)
-                        actions.append(Action(
-                            tenant_id=tenant_id, decision_id=decision.id, asset_id=asset_id, action_type="discharge",
-                            quantity=v["discharge_kw"], unit="kW", start_time=now, end_time=now + timedelta(hours=STEP_HOURS),
-                            envelope={"max_kw": v["discharge_kw"]}, expiry=now + timedelta(minutes=APPROVAL_WINDOW_MINUTES),
-                            risk_level=risk, reason="optimizer: discharge to meet demand/export at favourable price",
-                            expected_outcome={"soc_pct_after": v["soc_pct"]}, requires_approval=True,
-                        ))
+                actions.extend(build_actions_for_step(
+                    s, tenant_id=tenant_id, decision_id=decision.id, binding_constraints=decision.binding_constraints,
+                    now=now, step_hours=STEP_HOURS, approval_window_minutes=APPROVAL_WINDOW_MINUTES,
+                    asset_by_id=asset_by_id,
+                    grid_asset=AssetRef(id=grid_asset.id, rated_capacity_kw=grid_asset.rated_capacity_kw),
+                    grid_max_import_kw=limits["max_import_kw"], grid_max_export_kw=limits["max_export_kw"],
+                ))
             for action in actions:
                 db.add(action)
             db.flush()

@@ -42,6 +42,7 @@ class BatteryInput:
 class GenAssetInput:
     asset_id: str
     forecast_kw: list[float]  # len == n_steps, non-negative available generation
+    rated_capacity_kw: float = float("inf")  # used by scenario_lab.py to clip a perturbation at nameplate rating; unused by the solver itself
 
 
 @dataclass

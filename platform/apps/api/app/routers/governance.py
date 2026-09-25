@@ -11,11 +11,11 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from reo_common.audit import append_audit_event
 from reo_common.config import get_settings
 from reo_common.execution import dispatch_signal
-from reo_common.models import Approval, AutonomyPolicy, Decision, Signal
+from reo_common.models import Approval, AutonomyPolicy, Decision, ObjectivePolicy, Signal
 from reo_common.security import AuthContext
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -212,3 +212,96 @@ def trigger_estop(
     )
     db.commit()
     return {"tenant_id": ctx.tenant_id, "active": body.active}
+
+
+# ---------------------------------------------------------------------------
+# Objective policy (PRD "optimality criteria" — hackathon problem 4's F2:
+# "determine optimal cluster of options after determining optimality
+# criteria given a specific situation and adjusting for uncertainty" reads
+# on the ability to actually SET those criteria, not just have the
+# optimizer apply a fixed set baked in at seed time).
+# ---------------------------------------------------------------------------
+
+
+class ObjectivePolicyWeights(BaseModel):
+    cost: float = Field(0.35, ge=0, le=1)
+    degradation: float = Field(0.1, ge=0, le=1)
+    carbon: float = Field(0.15, ge=0, le=1)
+    curtailment: float = Field(0.15, ge=0, le=1)
+    reliability: float = Field(0.1, ge=0, le=1)
+
+
+class ObjectivePolicyRequest(BaseModel):
+    weights: ObjectivePolicyWeights
+    carbon_price_per_tonne: float = Field(80.0, ge=0)
+    risk_aversion: float = Field(0.2, ge=0, le=1, description="0=plan to the median forecast, 1=plan to the full q90 tail (fully risk-averse)")
+    combination_method: str = "lexicographic_safety_then_weighted_sum"
+
+
+class ObjectivePolicyResponse(BaseModel):
+    id: str
+    version: int
+    weights: dict
+    carbon_price_per_tonne: float
+    risk_aversion: float
+    combination_method: str
+    approved_by: str | None
+    created_at: str
+
+
+@router.get("/objective-policy", response_model=ObjectivePolicyResponse)
+def get_objective_policy(
+    ctx: AuthContext = Depends(require_permission("read:dashboard")), db: Session = Depends(db_session)
+) -> ObjectivePolicyResponse:
+    policy = db.execute(
+        select(ObjectivePolicy).where(ObjectivePolicy.tenant_id == ctx.tenant_id, ObjectivePolicy.is_active.is_(True))
+    ).scalar_one_or_none()
+    if policy is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no active objective policy for this tenant")
+    return ObjectivePolicyResponse(
+        id=policy.id, version=policy.version, weights=policy.weights, carbon_price_per_tonne=policy.carbon_price_per_tonne,
+        risk_aversion=policy.risk_aversion, combination_method=policy.combination_method, approved_by=policy.approved_by,
+        created_at=policy.created_at.isoformat(),
+    )
+
+
+@router.put("/objective-policy", response_model=ObjectivePolicyResponse)
+def set_objective_policy(
+    body: ObjectivePolicyRequest,
+    ctx: AuthContext = Depends(require_permission("manage:objective_policy")),
+    db: Session = Depends(db_session),
+) -> ObjectivePolicyResponse:
+    """Creates a new *version* rather than mutating in place — the previous
+    version stays in the table (is_active=False) so every past Decision's
+    `objective_policy_version` reference keeps meaning what it meant when
+    that decision was made (BR-06: retain objective weights alongside the
+    decision they governed)."""
+    current = db.execute(
+        select(ObjectivePolicy).where(ObjectivePolicy.tenant_id == ctx.tenant_id, ObjectivePolicy.is_active.is_(True))
+    ).scalar_one_or_none()
+    if current is not None:
+        current.is_active = False
+
+    policy = ObjectivePolicy(
+        tenant_id=ctx.tenant_id,
+        version=(current.version + 1) if current else 1,
+        weights=body.weights.model_dump(),
+        carbon_price_per_tonne=body.carbon_price_per_tonne,
+        risk_aversion=body.risk_aversion,
+        combination_method=body.combination_method,
+        approved_by=ctx.email,
+        is_active=True,
+    )
+    db.add(policy)
+    db.flush()
+    append_audit_event(
+        db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
+        event_type="objective_policy.changed",
+        payload={"version": policy.version, "weights": policy.weights, "risk_aversion": policy.risk_aversion, "carbon_price_per_tonne": policy.carbon_price_per_tonne},
+    )
+    db.commit()
+    return ObjectivePolicyResponse(
+        id=policy.id, version=policy.version, weights=policy.weights, carbon_price_per_tonne=policy.carbon_price_per_tonne,
+        risk_aversion=policy.risk_aversion, combination_method=policy.combination_method, approved_by=policy.approved_by,
+        created_at=policy.created_at.isoformat(),
+    )

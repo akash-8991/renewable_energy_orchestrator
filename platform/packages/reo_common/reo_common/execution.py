@@ -24,7 +24,16 @@ from .models import Action, Command, Decision, Signal
 
 log = logging.getLogger("reo_common.execution")
 
-DISPATCHABLE_ACTION_TYPES = {"charge", "discharge"}  # curtail/demand_response/maintenance_advice are advisory-only in this build (see SIMPLIFICATIONS.md)
+DISPATCHABLE_ACTION_TYPES = {
+    "charge", "discharge",  # battery
+    "buy", "sell",  # grid market (setpoint dispatched to the grid interconnection asset)
+    "curtail",  # renewable curtailment (setpoint dispatched to the solar/wind asset)
+    "demand_response",  # load shed (setpoint dispatched to the consumer asset)
+}
+# maintenance_advice stays advisory-only: there is no maintenance data model
+# or scheduling system in this build for a command to act against (see
+# docs/SIMPLIFICATIONS.md) — the Asset agent can recommend one, nothing
+# downstream can execute it yet.
 
 
 def build_signal_for_action(db: Session, decision: Decision, action: Action) -> Signal | None:

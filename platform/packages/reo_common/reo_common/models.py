@@ -565,6 +565,41 @@ class ExportJob(Base):
 register_tenant_scoped(ExportJob)
 
 
+class ScenarioRun(Base):
+    """A forward-looking what-if solve: the same decision cycle's optimizer
+    inputs, re-solved under a named perturbation (cloud cover, wind surge,
+    price spike, battery outage, line congestion, demand shock) over the
+    full horizon, so the operator sees how the plan and its KPIs would
+    change under that variation *before* anything happens for real — this
+    is the literal "simulate situation/scenario over a period of time by
+    accounting for potential variations in the input conditions" capability
+    (hackathon problem 4, solution feature F3), distinct from the
+    Simulation Lab's live shock injection into the real-time simulator.
+    """
+
+    __tablename__ = "scenario_runs"
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = tenant_fk()
+    decision_cycle_id: Mapped[str] = mapped_column(String(80), index=True)
+    scenario_name: Mapped[str] = mapped_column(String(40))  # BASELINE|CLOUD_COVER|WIND_SURGE|PRICE_SPIKE|BATTERY_OUTAGE|LINE_CONGESTION|DEMAND_SHOCK
+    solver_status: Mapped[str] = mapped_column(String(20))
+    objective_value: Mapped[float] = mapped_column(Float)
+    delta_vs_baseline: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_import_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    total_export_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    total_curtailment_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    total_shed_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    binding_constraints: Mapped[list] = mapped_column(JSONB, default=list)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_scenario_runs_tenant_cycle", "tenant_id", "decision_cycle_id"),)
+
+
+register_tenant_scoped(ScenarioRun)
+
+
 # ---------------------------------------------------------------------------
 # Audit (tamper-evident, hash-chained; tenant_id nullable for platform events)
 # ---------------------------------------------------------------------------

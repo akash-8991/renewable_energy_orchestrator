@@ -13,12 +13,68 @@ interface DecisionDetail extends DecisionSummary {
   plan: any; alternatives: any[]; reasoning: any; trusted_snapshot_ref: string | null; forecast_bundle_ref: string | null;
 }
 
+interface ScenarioRun {
+  scenario_name: string; solver_status: string; objective_value: number; delta_vs_baseline: number | null;
+  total_import_kwh: number; total_export_kwh: number; total_curtailment_kwh: number; total_shed_kwh: number;
+  binding_constraints: string[]; confidence: number;
+}
+
+function fmtKwh(v: number) {
+  return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function ScenarioComparisonTab({ decisionId }: { decisionId: string }) {
+  const { data, isLoading } = useQuery<ScenarioRun[]>({
+    queryKey: ["scenario-runs", decisionId],
+    queryFn: async () => (await api.get(`/decisions/${decisionId}/scenario-runs`)).data,
+  });
+
+  if (isLoading) return <div className="empty-state">Loading scenario comparison...</div>;
+  if (!data || data.length === 0)
+    return <div className="muted">No scenario simulation for this decision (only computed when the base solve succeeds).</div>;
+
+  const baseline = data.find((r) => r.scenario_name === "BASELINE");
+
+  return (
+    <div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+        Each row is a full 24h re-solve of this same decision cycle under one named variation — a forward
+        simulation, not something that has actually happened. Δ objective is relative to BASELINE (lower is better).
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Scenario</th><th>Status</th><th>Δ Objective</th><th>Import</th><th>Export</th><th>Curtailed</th><th>Shed</th><th>Binding</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((r) => (
+            <tr key={r.scenario_name}>
+              <td><Badge text={r.scenario_name} /></td>
+              <td><Badge text={r.solver_status} /></td>
+              <td style={{ color: r.delta_vs_baseline == null ? undefined : r.delta_vs_baseline > 0 ? "var(--red)" : "var(--green)" }}>
+                {r.delta_vs_baseline == null ? "—" : (r.delta_vs_baseline > 0 ? "+" : "") + r.delta_vs_baseline.toFixed(0)}
+              </td>
+              <td>{fmtKwh(r.total_import_kwh)} kWh</td>
+              <td>{fmtKwh(r.total_export_kwh)} kWh</td>
+              <td>{r.total_curtailment_kwh > 0 ? <span style={{ color: "var(--amber)" }}>{fmtKwh(r.total_curtailment_kwh)} kWh</span> : "—"}</td>
+              <td>{r.total_shed_kwh > 0 ? <span style={{ color: "var(--amber)" }}>{fmtKwh(r.total_shed_kwh)} kWh</span> : "—"}</td>
+              <td className="muted" style={{ fontSize: 11 }}>{r.binding_constraints.length}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {baseline && <p className="muted" style={{ fontSize: 11 }}>Baseline objective: {baseline.objective_value.toFixed(0)}</p>}
+    </div>
+  );
+}
+
 function DecisionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const { data, isLoading } = useQuery<DecisionDetail>({
     queryKey: ["decision", id],
     queryFn: async () => (await api.get(`/decisions/${id}`)).data,
   });
-  const [tab, setTab] = useState<"plan" | "reasoning" | "explanation">("explanation");
+  const [tab, setTab] = useState<"plan" | "reasoning" | "explanation" | "scenarios">("explanation");
 
   return (
     <div className="card" style={{ marginTop: 16 }}>
@@ -54,6 +110,7 @@ function DecisionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           <div className="tabs">
             <div className={"tab" + (tab === "explanation" ? " active" : "")} onClick={() => setTab("explanation")}>Operator Explanation</div>
             <div className={"tab" + (tab === "reasoning" ? " active" : "")} onClick={() => setTab("reasoning")}>Agent Findings</div>
+            <div className={"tab" + (tab === "scenarios" ? " active" : "")} onClick={() => setTab("scenarios")}>Scenario Comparison</div>
             <div className={"tab" + (tab === "plan" ? " active" : "")} onClick={() => setTab("plan")}>Raw Plan</div>
           </div>
           {tab === "explanation" && (
@@ -110,6 +167,7 @@ function DecisionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               )}
             </div>
           )}
+          {tab === "scenarios" && <ScenarioComparisonTab decisionId={id} />}
           {tab === "plan" && (
             <pre className="mono" style={{ background: "#0e1526", padding: 12, borderRadius: 8, overflow: "auto", maxHeight: 400 }}>
               {JSON.stringify(data.plan, null, 2)}
