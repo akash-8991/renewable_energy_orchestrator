@@ -163,11 +163,17 @@ python3 tests/demo_runner.py --base-url http://localhost:8000
 ### A9. (optional) Ingest the reference dataset
 
 If you have the reference dataset (`Renewable_Energy_Orchestrator_Dataset`, ~100MB of CSVs) in
-`../data/` — see `docs/DATA_INGESTION.md` for exactly what it contains — load it as real telemetry:
+`../data/` — see `docs/DATA_INGESTION.md` for exactly what it contains — load it:
 
 ```bash
 docker compose exec api python3 -m app.ingestion.hackathon_dataset
 ```
+
+This does two things: loads the four portfolio-level files as real telemetry (solar/wind output,
+grid frequency, market price, weather — a few seconds), and ingests the 100 retail/SME/industrial
+customer accounts (~10-15s, since it aggregates 863,600 15-minute readings down to 9,000 daily
+rows on the way in). The customer data then shows up in the dashboard's **Customers** workspace
+(Customer Insights tab), filterable by type/region/customer ID.
 
 ### A10. Stopping / cleaning up
 
