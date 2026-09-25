@@ -129,6 +129,16 @@ resource "aws_security_group" "alb" {
   name_prefix = "${var.project_name}-alb-"
   vpc_id      = aws_vpc.main.id
   ingress {
+    # Always open: the getting-started path (var.certificate_arn unset) runs
+    # HTTP-only on :80 — see ecs.tf's listener. Once a real domain + ACM
+    # cert is added, :80 becomes an HTTP->HTTPS redirect instead of serving
+    # traffic directly.
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"

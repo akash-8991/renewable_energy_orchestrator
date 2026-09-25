@@ -20,24 +20,24 @@ resource "aws_db_subnet_group" "main" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier             = "${var.project_name}-postgres"
-  engine                 = "postgres"
-  engine_version         = "16"
-  instance_class         = var.db_instance_class
-  allocated_storage      = 100
-  max_allocated_storage  = 500
-  storage_encrypted      = true
-  kms_key_id             = aws_kms_key.main.arn
-  db_name                = "reo"
-  username               = "reo_app"
+  identifier                  = "${var.project_name}-postgres"
+  engine                      = "postgres"
+  engine_version              = "16"
+  instance_class              = var.db_instance_class
+  allocated_storage           = 100
+  max_allocated_storage       = 500
+  storage_encrypted           = true
+  kms_key_id                  = aws_kms_key.main.arn
+  db_name                     = "reo"
+  username                    = "reo_app"
   manage_master_user_password = true
-  multi_az               = true
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.data.id]
-  backup_retention_period = 7
-  deletion_protection    = true
-  skip_final_snapshot    = false
-  final_snapshot_identifier = "${var.project_name}-postgres-final"
+  multi_az                    = true
+  db_subnet_group_name        = aws_db_subnet_group.main.name
+  vpc_security_group_ids      = [aws_security_group.data.id]
+  backup_retention_period     = 7
+  deletion_protection         = true
+  skip_final_snapshot         = false
+  final_snapshot_identifier   = "${var.project_name}-postgres-final"
 }
 
 resource "aws_elasticache_subnet_group" "main" {
@@ -47,17 +47,17 @@ resource "aws_elasticache_subnet_group" "main" {
 
 resource "aws_elasticache_replication_group" "redis" {
   replication_group_id       = "${var.project_name}-redis"
-  description                 = "Redis Streams event bus + cache - documented substitute for MSK/Kafka+MQTT (SIMPLIFICATIONS.md)"
-  node_type                   = var.redis_node_type
-  num_cache_clusters           = 2
-  automatic_failover_enabled  = true
-  engine                       = "redis"
-  engine_version               = "7.1"
-  at_rest_encryption_enabled  = true
-  transit_encryption_enabled  = true
-  kms_key_id                  = aws_kms_key.main.arn
-  subnet_group_name           = aws_elasticache_subnet_group.main.name
-  security_group_ids          = [aws_security_group.data.id]
+  description                = "Redis Streams event bus + cache - documented substitute for MSK/Kafka+MQTT (SIMPLIFICATIONS.md)"
+  node_type                  = var.redis_node_type
+  num_cache_clusters         = 2
+  automatic_failover_enabled = true
+  engine                     = "redis"
+  engine_version             = "7.1"
+  at_rest_encryption_enabled = true
+  transit_encryption_enabled = true
+  kms_key_id                 = aws_kms_key.main.arn
+  subnet_group_name          = aws_elasticache_subnet_group.main.name
+  security_group_ids         = [aws_security_group.data.id]
 }
 
 resource "aws_s3_bucket" "lakehouse" {
@@ -134,7 +134,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "exports" {
   rule {
     id     = "expire-export-downloads"
     status = "Enabled"
-    filter {} # applies to all objects in the bucket
+    filter {}               # applies to all objects in the bucket
     expiration { days = 7 } # matches ExportJob.expires_at short-lived-URL policy
   }
 }
@@ -153,6 +153,21 @@ resource "aws_secretsmanager_secret" "anthropic_api_key" {
 resource "aws_secretsmanager_secret_version" "anthropic_api_key" {
   secret_id     = aws_secretsmanager_secret.anthropic_api_key.id
   secret_string = var.anthropic_api_key
+}
+
+# OpenRouter (https://openrouter.ai) is the platform's default model
+# provider (MODEL_PROVIDER=openrouter — see reo_common/model_gateway.py's
+# OpenRouterModelGateway) as of the OpenRouter migration; Anthropic/OpenAI
+# direct remain supported (set var.model_provider) but aren't the default
+# path this deployment wires up end to end.
+resource "aws_secretsmanager_secret" "openrouter_api_key" {
+  name       = "${var.project_name}/model-gateway/openrouter-api-key"
+  kms_key_id = aws_kms_key.main.key_id
+}
+
+resource "aws_secretsmanager_secret_version" "openrouter_api_key" {
+  secret_id     = aws_secretsmanager_secret.openrouter_api_key.id
+  secret_string = var.openrouter_api_key
 }
 
 resource "aws_secretsmanager_secret" "jwt_secret" {

@@ -113,20 +113,22 @@ resource "aws_ecs_task_definition" "service" {
   task_role_arn            = aws_iam_role.task.arn
 
   container_definitions = jsonencode([{
-    name      = each.key
-    image     = "${aws_ecr_repository.service[each.key].repository_url}:${var.container_image_tag}"
-    essential = true
+    name         = each.key
+    image        = "${aws_ecr_repository.service[each.key].repository_url}:${var.container_image_tag}"
+    essential    = true
     portMappings = each.value.port == null ? [] : [{ containerPort = each.value.port, protocol = "tcp" }]
     environment = [
       { name = "ENVIRONMENT", value = var.environment },
       { name = "SECRETS_PROVIDER", value = "aws" },
-      { name = "MODEL_PROVIDER", value = "anthropic" },
+      { name = "MODEL_PROVIDER", value = var.model_provider },
+      { name = "OPENROUTER_MODEL", value = var.openrouter_model },
       { name = "S3_REGION", value = var.aws_region },
     ]
     secrets = [
       { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },
       { name = "REDIS_URL", valueFrom = aws_secretsmanager_secret.redis_url.arn },
       { name = "JWT_SECRET", valueFrom = aws_secretsmanager_secret.jwt_secret.arn },
+      { name = "OPENROUTER_API_KEY", valueFrom = aws_secretsmanager_secret.openrouter_api_key.arn },
       { name = "ANTHROPIC_API_KEY", valueFrom = aws_secretsmanager_secret.anthropic_api_key.arn },
     ]
     logConfiguration = {
@@ -211,15 +213,50 @@ resource "aws_lb_target_group" "api" {
   }
 }
 
+locals {
+  has_certificate = var.certificate_arn != ""
+}
+
+# First-evaluation path: no domain/ACM cert yet -> plain HTTP on :80.
+resource "aws_lb_listener" "http" {
+  count             = local.has_certificate ? 0 : 1
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api[0].arn
+  }
+}
+
+# Once var.certificate_arn is set (a real domain's ACM cert): HTTPS on :443
+# serves traffic, and :80 becomes a redirect to it instead of serving
+# directly.
 resource "aws_lb_listener" "https" {
+  count             = local.has_certificate ? 1 : 0
   load_balancer_arn = aws_lb.main.arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  # certificate_arn must be supplied at apply time (ACM cert for the tenant's domain)
+  certificate_arn   = var.certificate_arn
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api[0].arn
+  }
+}
+
+resource "aws_lb_listener" "http_redirect" {
+  count             = local.has_certificate ? 1 : 0
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type = "redirect"
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
   }
 }
 
@@ -231,7 +268,7 @@ resource "aws_secretsmanager_secret" "database_url" {
 }
 
 resource "aws_secretsmanager_secret_version" "database_url" {
-  secret_id = aws_secretsmanager_secret.database_url.id
+  secret_id     = aws_secretsmanager_secret.database_url.id
   secret_string = "postgresql+psycopg2://reo_app:${random_password.db_placeholder.result}@${aws_db_instance.postgres.address}:5432/reo"
   lifecycle {
     ignore_changes = [secret_string] # real password is RDS-managed (manage_master_user_password); rotate via Secrets Manager rotation, not Terraform

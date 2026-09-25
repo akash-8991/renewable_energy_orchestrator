@@ -42,11 +42,35 @@ variable "container_image_tag" {
   default     = "latest"
 }
 
-variable "anthropic_api_key" {
-  description = "Set via -var or TF_VAR_anthropic_api_key at apply time; stored in Secrets Manager, never in state as plaintext output"
+variable "model_provider" {
+  description = "openrouter (default — see reo_common/model_gateway.py) | anthropic | openai | mock"
+  type        = string
+  default     = "openrouter"
+}
+
+variable "openrouter_api_key" {
+  description = "Set via -var or TF_VAR_openrouter_api_key at apply time (get one at https://openrouter.ai/settings/keys); stored in Secrets Manager, never in state as plaintext output"
   type        = string
   default     = ""
   sensitive   = true
+}
+
+variable "openrouter_model" {
+  type    = string
+  default = "openai/gpt-4o-mini"
+}
+
+variable "anthropic_api_key" {
+  description = "Only used when model_provider=anthropic. Set via -var or TF_VAR_anthropic_api_key at apply time; stored in Secrets Manager, never in state as plaintext output"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for the ALB's HTTPS listener, in the same region as var.aws_region. Leave empty for a first evaluation deployment — the ALB then serves plain HTTP on :80 instead (see ecs.tf's listener); add a real domain + this cert once one exists, no other change needed."
+  type        = string
+  default     = ""
 }
 
 variable "enable_secondary_region_dr" {

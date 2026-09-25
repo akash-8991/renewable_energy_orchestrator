@@ -2,6 +2,11 @@ output "alb_dns_name" {
   value = aws_lb.main.dns_name
 }
 
+output "api_base_url" {
+  description = "Pass as VITE_API_BASE_URL when building frontend/ for this deployment."
+  value       = var.certificate_arn != "" ? "https://${aws_lb.main.dns_name}" : "http://${aws_lb.main.dns_name}"
+}
+
 output "ecr_repository_urls" {
   value = { for k, v in aws_ecr_repository.service : k => v.repository_url }
 }

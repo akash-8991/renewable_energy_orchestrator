@@ -8,7 +8,9 @@ gateway retain sole authority over anything that touches equipment.
 
 See `docs/ARCHITECTURE.md` for the build-to-spec traceability map, `docs/SIMPLIFICATIONS.md` for
 every deliberate scope decision made to build this without a real client engagement, and
-`docs/PRODUCTION_READINESS_REVIEW.md` for a direct answer on deployment readiness.
+`docs/PRODUCTION_READINESS_REVIEW.md` for a direct answer on deployment readiness. For full
+click-by-click steps to run this locally or actually stand it up on AWS (or another cloud), see
+**`docs/DEPLOYMENT.md`** — the quickstart below is the condensed version.
 
 ## Repository layout
 
