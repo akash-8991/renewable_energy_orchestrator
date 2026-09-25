@@ -44,6 +44,7 @@ export default function AuditExports() {
             <span className="muted">Hash-chain integrity:</span>
             {chain ? <Badge text={chain.chain_valid ? "valid" : "BROKEN"} /> : "—"}
           </div>
+          <div className="table-scroll">
           <table>
             <thead><tr><th>Time</th><th>Event</th><th>Actor</th><th>Hash</th></tr></thead>
             <tbody>
@@ -57,6 +58,7 @@ export default function AuditExports() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import Badge from "../components/Badge";
+import PortfolioTrendChart from "../components/PortfolioTrendChart";
 
 interface AssetSnapshot {
   id: string;
@@ -69,6 +70,8 @@ export default function PortfolioOperations() {
           <div className="big">{(batteries || []).map((b) => `${fmt(b.soc_pct, 0)}%`).join(" / ") || "—"}</div>
         </div>
       </div>
+
+      <PortfolioTrendChart />
 
       {(portfolios || []).map((p) => (
         <div key={p.id} style={{ marginBottom: 24 }}>

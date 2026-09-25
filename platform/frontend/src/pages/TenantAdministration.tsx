@@ -60,6 +60,7 @@ export default function TenantAdministration() {
       </form>
 
       <h3 style={{ fontSize: 13, textTransform: "uppercase", color: "var(--text-dim)" }}>Users in this tenant</h3>
+      <div className="table-scroll">
       <table>
         <thead><tr><th>Email</th><th>Name</th><th>Roles</th><th>Active</th></tr></thead>
         <tbody>
@@ -73,12 +74,14 @@ export default function TenantAdministration() {
           ))}
         </tbody>
       </table>
+      </div>
 
       {tenants && (
         <>
           <h3 style={{ fontSize: 13, textTransform: "uppercase", color: "var(--text-dim)", marginTop: 24 }}>
             All platform tenants (platform_admin only)
           </h3>
+          <div className="table-scroll">
           <table>
             <thead><tr><th>Slug</th><th>Name</th><th>Mode</th><th>Created</th></tr></thead>
             <tbody>
@@ -92,6 +95,7 @@ export default function TenantAdministration() {
               ))}
             </tbody>
           </table>
+          </div>
         </>
       )}
     </div>

@@ -133,10 +133,6 @@ a { color: var(--accent); text-decoration: none; }
   .topbar { padding: 0 14px; }
   .topbar h1 { font-size: 14px; }
   .content { padding: 12px; }
-
-  .login-box { width: 100%; max-width: 360px; }
-
-  table { min-width: 640px; }
 }
 
 .grid { display: grid; gap: 14px; }
@@ -152,8 +148,15 @@ a { color: var(--accent); text-decoration: none; }
 .card h3 { margin: 0 0 8px; font-size: 13px; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
 .card .big { font-size: 24px; font-weight: 700; }
 
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; color: var(--text-dim); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; }
+/* Every table on the platform is wrapped in a .table-scroll div (see
+   components/TableScroll.tsx) so a table with more columns than the
+   viewport can hold scrolls horizontally within its own box instead of
+   forcing the whole page to scroll or squeezing columns illegibly. The
+   min-width keeps columns from ever compressing below a readable size,
+   which is what makes that horizontal scroll actually kick in. */
+.table-scroll { overflow-x: auto; border-radius: var(--radius); }
+table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--text-dim); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; white-space: nowrap; }
 td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 tr:hover td { background: var(--bg-panel-2); }
 
@@ -205,20 +208,68 @@ label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 
 .muted { color: var(--text-dim); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
-.login-screen {
-  min-height: 100vh;
+.login-screen { min-height: 100vh; display: flex; }
+
+.login-brand {
+  flex: 1 1 46%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 64px;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #172554 100%);
+}
+.login-brand::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.14), transparent 55%);
+  pointer-events: none;
+}
+.login-brand-mark {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.16);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  font-size: 22px;
+  margin-bottom: 28px;
+}
+.login-brand h1 { position: relative; font-size: 28px; line-height: 1.25; margin: 0 0 14px; font-weight: 700; letter-spacing: -0.01em; }
+.login-brand p { position: relative; font-size: 15px; color: rgba(255, 255, 255, 0.8); max-width: 380px; line-height: 1.6; margin: 0 0 32px; }
+.login-brand-features { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.login-brand-features li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: rgba(255, 255, 255, 0.88); }
+.login-brand-features li::before { content: "✓"; flex-shrink: 0; font-weight: 700; color: #fff; }
+
+.login-panel {
+  flex: 1 1 54%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
 }
 .login-box {
-  width: 360px;
+  width: 100%;
+  max-width: 380px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 28px;
+  padding: 32px;
   box-shadow: var(--shadow-md);
+}
+
+/* Placed after the base .login-brand/.login-panel rules above so this
+   override actually wins the cascade at matching widths — an equal-
+   specificity rule earlier in the file (e.g. inside the general mobile
+   media query near the top) loses to these regardless of source order. */
+@media (max-width: 860px) {
+  .login-brand { display: none; }
+  .login-panel { padding: 32px 24px; }
 }
 
 .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }

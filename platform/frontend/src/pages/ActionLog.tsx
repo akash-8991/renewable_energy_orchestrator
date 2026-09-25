@@ -88,6 +88,7 @@ export default function ActionLog() {
       {error && <div className="error-banner">Failed to load action tickets.</div>}
       {data && data.length === 0 && <div className="empty-state">No actions match these filters.</div>}
       {data && data.length > 0 && (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -104,11 +105,12 @@ export default function ActionLog() {
                 <td><Badge text={t.risk_level} /></td>
                 <td><Badge text={t.ticket_status} /></td>
                 <td className="mono muted" style={{ fontSize: 11 }}>{t.decision_cycle_id}</td>
-                <td className="muted" style={{ fontSize: 12, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.reason || ""}</td>
+                <td className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{t.reason || ""}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

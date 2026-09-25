@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from output.audit import append_audit_event
 from reo_common.config import get_settings
 from policy.engine.execution import dispatch_signal
-from models.canonical import Approval, AutonomyPolicy, Decision, ObjectivePolicy, Signal
+from models.canonical import Action, Approval, Asset, AutonomyPolicy, Decision, ObjectivePolicy, Signal
 from reo_common.security import AuthContext
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,6 +30,10 @@ class ApprovalSummary(BaseModel):
     id: str
     decision_id: str
     action_id: str | None
+    action_type: str | None = None
+    action_quantity: float | None = None
+    action_unit: str | None = None
+    asset_name: str | None = None
     outcome: str
     requires_second_approver: bool
     expires_at: str
@@ -43,14 +47,27 @@ def list_approvals(
     db: Session = Depends(db_session),
 ) -> list[ApprovalSummary]:
     rows = db.execute(select(Approval).where(Approval.outcome == outcome).order_by(Approval.created_at.desc())).scalars().all()
-    return [
-        ApprovalSummary(
-            id=a.id, decision_id=a.decision_id, action_id=a.action_id, outcome=a.outcome,
+
+    action_ids = [a.action_id for a in rows if a.action_id]
+    actions = {a.id: a for a in db.execute(select(Action).where(Action.id.in_(action_ids))).scalars().all()} if action_ids else {}
+    asset_ids = [a.asset_id for a in actions.values() if a.asset_id]
+    assets = {a.id: a for a in db.execute(select(Asset).where(Asset.id.in_(asset_ids))).scalars().all()} if asset_ids else {}
+
+    out = []
+    for a in rows:
+        action = actions.get(a.action_id) if a.action_id else None
+        asset = assets.get(action.asset_id) if action and action.asset_id else None
+        out.append(ApprovalSummary(
+            id=a.id, decision_id=a.decision_id, action_id=a.action_id,
+            action_type=action.action_type if action else None,
+            action_quantity=action.quantity if action else None,
+            action_unit=action.unit if action else None,
+            asset_name=asset.name if asset else None,
+            outcome=a.outcome,
             requires_second_approver=a.requires_second_approver,
             expires_at=a.expires_at.isoformat(), created_at=a.created_at.isoformat(),
-        )
-        for a in rows
-    ]
+        ))
+    return out
 
 
 class ApprovalDecisionRequest(BaseModel):

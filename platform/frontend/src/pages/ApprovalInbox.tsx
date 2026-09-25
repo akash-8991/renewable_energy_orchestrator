@@ -5,8 +5,17 @@ import Badge from "../components/Badge";
 import { useAuth } from "../auth/AuthContext";
 
 interface Approval {
-  id: string; decision_id: string; action_id: string | null; outcome: string;
+  id: string; decision_id: string; action_id: string | null;
+  action_type: string | null; action_quantity: number | null; action_unit: string | null; asset_name: string | null;
+  outcome: string;
   requires_second_approver: boolean; expires_at: string; created_at: string;
+}
+
+function describeDecision(a: Approval): string {
+  if (!a.action_type) return "—";
+  const qty = a.action_quantity != null ? `${a.action_quantity.toLocaleString(undefined, { maximumFractionDigits: 0 })} ${a.action_unit || ""}`.trim() : "";
+  const target = a.asset_name ? ` — ${a.asset_name}` : "";
+  return `${a.action_type}${qty ? " " + qty : ""}${target}`;
 }
 
 export default function ApprovalInbox() {
@@ -44,14 +53,16 @@ export default function ApprovalInbox() {
       {isLoading && <div className="empty-state">Loading...</div>}
       {data && data.length === 0 && <div className="empty-state">Nothing pending approval right now.</div>}
       {data && data.length > 0 && (
+        <div className="table-scroll">
         <table>
           <thead>
-            <tr><th>Requested</th><th>Decision</th><th>Action</th><th>Four-eyes</th><th>Expires</th>{canDecide && <th></th>}</tr>
+            <tr><th>Requested</th><th>Decision</th><th>Decision ID</th><th>Action ID</th><th>Four-eyes</th><th>Expires</th>{canDecide && <th></th>}</tr>
           </thead>
           <tbody>
             {data.map((a) => (
               <tr key={a.id}>
                 <td>{new Date(a.created_at).toLocaleTimeString()}</td>
+                <td>{describeDecision(a)}</td>
                 <td className="mono">{a.decision_id.slice(0, 8)}</td>
                 <td className="mono">{a.action_id?.slice(0, 8) || "—"}</td>
                 <td>{a.requires_second_approver ? <Badge text="required" /> : "—"}</td>
@@ -73,6 +84,7 @@ export default function ApprovalInbox() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

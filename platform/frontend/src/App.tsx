@@ -6,6 +6,7 @@ import AgentObservability from "./pages/AgentObservability";
 import ApprovalInbox from "./pages/ApprovalInbox";
 import AuditExports from "./pages/AuditExports";
 import ConnectorStudio from "./pages/ConnectorStudio";
+import CustomerDecisions from "./pages/CustomerDecisions";
 import DecisionCentre from "./pages/DecisionCentre";
 import DocumentIntake from "./pages/DocumentIntake";
 import LiveSignalMonitor from "./pages/LiveSignalMonitor";
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="/" element={<Navigate to="/portfolio" replace />} />
         <Route path="/portfolio" element={<PortfolioOperations />} />
         <Route path="/decisions" element={<DecisionCentre />} />
+        <Route path="/customers" element={<CustomerDecisions />} />
         <Route path="/approvals" element={<ApprovalInbox />} />
         <Route path="/signals" element={<LiveSignalMonitor />} />
         <Route path="/actions" element={<ActionLog />} />

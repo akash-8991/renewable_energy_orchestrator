@@ -108,6 +108,7 @@ export default function ConnectorStudio() {
       )}
       {isLoading && <div className="empty-state">Loading...</div>}
       {data && (
+        <div className="table-scroll">
         <table>
           <thead><tr><th>Name</th><th>Kind</th><th>Endpoint</th><th>Status</th><th>Credential</th><th>Last test</th><th></th></tr></thead>
           <tbody>
@@ -115,7 +116,7 @@ export default function ConnectorStudio() {
               <tr key={c.id}>
                 <td>{c.name}</td>
                 <td><Badge text={c.kind} /></td>
-                <td className="mono" style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>{c.endpoint_url}</td>
+                <td className="mono" style={{ whiteSpace: "nowrap" }}>{c.endpoint_url}</td>
                 <td><Badge text={c.status} /></td>
                 <td className="muted">{c.credential_masked ? JSON.stringify(c.credential_masked) : "none"}</td>
                 <td>{c.last_test_result ? (c.last_test_result.http_status ?? (c.last_test_result.ssrf_allowed ? "reachable?" : "blocked")) : "—"}</td>
@@ -132,6 +133,7 @@ export default function ConnectorStudio() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

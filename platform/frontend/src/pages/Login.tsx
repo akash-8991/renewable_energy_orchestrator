@@ -27,29 +27,47 @@ export default function Login() {
 
   return (
     <div className="login-screen">
-      <form className="login-box" onSubmit={onSubmit}>
-        <h2 style={{ marginTop: 0 }}>Renewable Energy Orchestrator</h2>
-        <p className="muted" style={{ marginTop: -8, fontSize: 13 }}>Platform Console</p>
-        {error && <div className="error-banner">{error}</div>}
-        <div className="field">
-          <label>Tenant slug</label>
-          <input value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} style={{ width: "100%" }} />
-        </div>
-        <div className="field">
-          <label>Email</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%" }} />
-        </div>
-        <div className="field">
-          <label>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%" }} />
-        </div>
-        <button type="submit" disabled={loading} style={{ width: "100%" }}>
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-        <p className="muted" style={{ fontSize: 11, marginTop: 14 }}>
-          Demo credentials pre-filled. See platform/db/seed.py for the full list of seeded users/roles.
+      <div className="login-brand">
+        <div className="login-brand-mark">⚡</div>
+        <h1>Renewable Energy Orchestrator</h1>
+        <p>
+          Decision and control platform coordinating solar, wind, battery storage, demand
+          flexibility, grid interconnection and market participation — with a governed agent
+          layer that explains every recommendation and a deterministic optimizer that stays in
+          sole control of anything that touches equipment.
         </p>
-      </form>
+        <ul className="login-brand-features">
+          <li>Live portfolio telemetry with freshness-scored digital twin</li>
+          <li>Explainable, evidence-backed decisions on every cycle</li>
+          <li>Role-based approval workflow with independent OT safety validation</li>
+        </ul>
+      </div>
+      <div className="login-panel">
+        <form className="login-box" onSubmit={onSubmit}>
+          <h2 style={{ marginTop: 0, marginBottom: 2, fontSize: 20 }}>Sign in</h2>
+          <p className="muted" style={{ marginTop: 0, marginBottom: 22, fontSize: 13 }}>Platform Console</p>
+          {error && <div className="error-banner">{error}</div>}
+          <div className="field">
+            <label>Tenant slug</label>
+            <input value={tenantSlug} onChange={(e) => setTenantSlug(e.target.value)} style={{ width: "100%" }} />
+          </div>
+          <div className="field">
+            <label>Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} style={{ width: "100%" }} />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ width: "100%" }} />
+          </div>
+          <button type="submit" disabled={loading} style={{ width: "100%" }}>
+            {loading ? "Signing in..." : "Sign in"}
+          </button>
+          <p className="muted" style={{ fontSize: 11, marginTop: 16 }}>
+            Demo credentials pre-filled. See <code className="mono">docs/DEPLOYMENT.md</code> (§ A7) for the
+            full table of seeded users/roles.
+          </p>
+        </form>
+      </div>
     </div>
   );
 }

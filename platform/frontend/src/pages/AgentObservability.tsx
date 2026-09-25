@@ -61,7 +61,8 @@ function CallMetricsTab() {
 
       <h3 style={{ fontSize: 13, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Per-agent (24h)</h3>
       {summary && summary.by_agent.length > 0 ? (
-        <table style={{ marginBottom: 20 }}>
+        <div className="table-scroll" style={{ marginBottom: 20 }}>
+        <table>
           <thead>
             <tr><th>Agent</th><th>Calls</th><th>Schema-valid</th><th>Retried</th><th>Avg latency</th><th>P95 latency</th><th>Tokens (in/out)</th></tr>
           </thead>
@@ -79,12 +80,14 @@ function CallMetricsTab() {
             ))}
           </tbody>
         </table>
+        </div>
       ) : (
         <div className="muted" style={{ marginBottom: 20 }}>No agent calls in the last 24h.</div>
       )}
 
       <h3 style={{ fontSize: 13, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 8 }}>Recent calls</h3>
       {calls && calls.length > 0 ? (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr><th>Time</th><th>Agent</th><th>Provider/Model</th><th>Latency</th><th>Schema</th><th>Retried</th><th>Error</th></tr>
@@ -98,11 +101,12 @@ function CallMetricsTab() {
                 <td>{c.latency_ms.toFixed(0)}ms</td>
                 <td><Badge text={c.schema_valid ? "valid" : "invalid"} /></td>
                 <td>{c.retried ? <Badge text="retried" /> : "—"}</td>
-                <td className="muted" style={{ fontSize: 11, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.error || ""}</td>
+                <td className="muted" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{c.error || ""}</td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       ) : (
         <div className="empty-state">No calls recorded yet.</div>
       )}

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from models.canonical import Asset, Battery, Portfolio, Site, Telemetry
 from reo_common.security import AuthContext
 from reo_common.twin import assess_freshness, latest_readings_for_tenant
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ..deps import db_session, require_permission
@@ -118,3 +118,76 @@ def get_asset_telemetry(
         .order_by(Telemetry.event_time.asc())
     ).scalars().all()
     return [TelemetryPoint(event_time=r.event_time.isoformat(), value=r.value, quality=r.quality) for r in rows]
+
+
+class TrendPoint(BaseModel):
+    bucket_time: str
+    generation_kw: float
+    demand_kw: float
+    battery_kw: float
+
+
+# generation/demand asset_type -> the portfolio-level series it rolls into
+# (mirrors the same power_kw sign/grouping convention PortfolioOperations
+# uses for its summary cards, just aggregated over a time range instead of
+# only the latest reading).
+_GENERATION_TYPES = {"solar", "wind"}
+_DEMAND_TYPES = {"consumer"}
+_BATTERY_TYPES = {"battery"}
+
+
+@router.get("/trend", response_model=list[TrendPoint])
+def get_portfolio_trend(
+    since: datetime = Query(..., description="range start, ISO 8601"),
+    until: datetime = Query(..., description="range end, ISO 8601"),
+    bucket_minutes: int = Query(15, ge=1, le=1440),
+    ctx: AuthContext = Depends(require_permission("read:dashboard")),
+    db: Session = Depends(db_session),
+) -> list[TrendPoint]:
+    if until <= since:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "until must be after since")
+
+    # bucket_minutes is server-validated (1-1440), so it's safe to splice into
+    # the interval literal — Timescale's time_bucket() needs a real INTERVAL,
+    # which SQLAlchemy has no portable bind-param type for.
+    #
+    # Two-stage aggregation, not a flat SUM: an asset publishes many raw
+    # readings per bucket (edge-simulator samples every few seconds), so a
+    # single-stage SUM(value) grouped by (bucket, asset_type) would add up
+    # every sample from every asset in the bucket — inflating totals by
+    # roughly (bucket duration / sample interval). Stage 1 collapses each
+    # asset down to its own average power per bucket; stage 2 sums those
+    # per-asset averages across assets of the same type, which is the actual
+    # portfolio-level total this endpoint is supposed to report.
+    bucket = func.time_bucket(text(f"interval '{bucket_minutes} minutes'"), Telemetry.event_time).label("bucket")
+    per_asset_bucket = (
+        select(
+            bucket, Asset.asset_type.label("asset_type"), Telemetry.asset_id,
+            func.avg(Telemetry.value).label("avg_value"),
+        )
+        .join(Asset, Asset.id == Telemetry.asset_id)
+        .where(
+            Telemetry.tenant_id == ctx.tenant_id,
+            Telemetry.metric == "power_kw",
+            Telemetry.event_time >= since,
+            Telemetry.event_time <= until,
+        )
+        .group_by(bucket, Asset.asset_type, Telemetry.asset_id)
+    ).subquery()
+    stmt = (
+        select(per_asset_bucket.c.bucket, per_asset_bucket.c.asset_type, func.sum(per_asset_bucket.c.avg_value).label("total"))
+        .group_by(per_asset_bucket.c.bucket, per_asset_bucket.c.asset_type)
+        .order_by(per_asset_bucket.c.bucket)
+    )
+    by_bucket: dict[datetime, dict[str, float]] = {}
+    for row in db.execute(stmt).all():
+        by_bucket.setdefault(row.bucket, {})[row.asset_type] = row.total
+
+    out = []
+    for bucket_time in sorted(by_bucket):
+        totals = by_bucket[bucket_time]
+        generation = sum(totals.get(t, 0.0) for t in _GENERATION_TYPES)
+        demand = abs(sum(totals.get(t, 0.0) for t in _DEMAND_TYPES))
+        battery = sum(totals.get(t, 0.0) for t in _BATTERY_TYPES)
+        out.append(TrendPoint(bucket_time=bucket_time.isoformat(), generation_kw=generation, demand_kw=demand, battery_kw=battery))
+    return out

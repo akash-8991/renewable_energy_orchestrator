@@ -66,6 +66,7 @@ def list_actions(
     status: str | None = Query(None, description="filter by derived ticket_status"),
     action_type: str | None = Query(None),
     risk_level: str | None = Query(None),
+    asset_id: str | None = Query(None, description="filter to actions taken against one asset"),
     since: datetime | None = Query(None),
     limit: int = Query(200, le=2000),
     ctx: AuthContext = Depends(require_permission("read:decisions")),
@@ -76,6 +77,8 @@ def list_actions(
         stmt = stmt.where(Action.action_type == action_type)
     if risk_level:
         stmt = stmt.where(Action.risk_level == risk_level)
+    if asset_id:
+        stmt = stmt.where(Action.asset_id == asset_id)
     if since:
         stmt = stmt.where(Action.start_time >= since)
     actions = db.execute(stmt).scalars().all()

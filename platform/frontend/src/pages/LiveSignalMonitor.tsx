@@ -22,6 +22,7 @@ export default function LiveSignalMonitor() {
       {isLoading && <div className="empty-state">Loading...</div>}
       {data && data.length === 0 && <div className="empty-state">No signals yet — enable APPROVAL_REQUIRED or AUTONOMOUS_BOUNDED mode in Policy Studio to see dispatchable actions.</div>}
       {data && data.length > 0 && (
+        <div className="table-scroll">
         <table>
           <thead>
             <tr><th>Updated</th><th>Asset</th><th>Command</th><th>Setpoint</th><th>State</th><th>History</th></tr>
@@ -41,6 +42,7 @@ export default function LiveSignalMonitor() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

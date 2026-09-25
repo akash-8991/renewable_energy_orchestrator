@@ -22,7 +22,7 @@ platform/
 ├── backend/          FastAPI HTTP API — ingestion, digital twin, decisions, governance,
 │                      connectors, exports, audit, admin, observability. The dashboard's
 │                      only entry point into the platform.
-├── frontend/          React + TypeScript + Vite dashboard (11 workspaces).
+├── frontend/          React + TypeScript + Vite dashboard (14 workspaces).
 ├── agent/              The 9 specialist LLM agents (doc 07) + their orchestration loop
 │                      (worker.py). Agents only ever produce typed JSON evidence — never a
 │                      command — consumed by policy/ below.
@@ -95,9 +95,10 @@ Demo login: tenant slug `demo-utility`, any seeded email (e.g. `tenant.admin@dem
 password `Password123!` (local/demo only — see `database/seed.py`). For the full table of all 9
 demo accounts and what each role can do, see **`docs/DEPLOYMENT.md`** (§ A7, "Demo accounts").
 
-The dashboard has 11 workspaces (sidebar): Portfolio Operations, Decision Centre, Approval Inbox,
-Live Signal Monitor, Action Tickets, Connector Studio, Document Intake, Policy Studio, Simulation
-Lab, Agent Observability, Audit & Exports, Tenant Administration, Platform Operations — each role
+The dashboard has 14 workspaces (sidebar): Portfolio Operations, Decision Centre, Customer
+Decisions, Approval Inbox, Live Signal Monitor, Action Tickets, Connector Studio, Document Intake,
+Policy Studio, Simulation Lab, Agent Observability, Audit & Exports, Tenant Administration,
+Platform Operations — each role
 sees a different subset per its RBAC permissions (e.g. only `portfolio_manager` can drive
 Simulation Lab; only `tenant_admin`/`platform_admin` can provision users/tenants; only
 `model_admin` can trigger an evaluation run).
