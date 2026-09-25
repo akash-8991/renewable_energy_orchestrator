@@ -100,8 +100,9 @@ Approval Inbox, Live Signal Monitor, Action Tickets, Connector Studio, Document 
 Policy Studio, Simulation Lab, Agent Observability, Audit & Exports, Tenant Administration,
 Platform Operations — each role
 sees a different subset per its RBAC permissions (e.g. only `portfolio_manager` can drive
-Simulation Lab; only `tenant_admin`/`platform_admin` can provision users/tenants; only
-`model_admin` can trigger an evaluation run).
+Simulation Lab; only `tenant_admin` can provision users/tenants; only `model_admin` can trigger an
+evaluation run) — except `platform_admin`, which is a deliberate superuser and can do all of it
+(see `docs/DEPLOYMENT.md`'s demo-account table).
 
 ## Run the demo script
 

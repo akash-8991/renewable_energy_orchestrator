@@ -98,6 +98,14 @@ PERMISSIONS: dict[str, set[str]] = {
     },
 }
 
+# Every permission string declared anywhere above, computed once at import
+# time — this is what makes PLATFORM_ADMIN a true superuser below: the union
+# of every *other* role's permissions too, not just its own five. Because
+# it's derived from PERMISSIONS itself rather than a separately maintained
+# list, a permission added to any role later is automatically covered here
+# too, with nothing to keep in sync.
+_ALL_PERMISSIONS: frozenset[str] = frozenset(p for perms in PERMISSIONS.values() for p in perms)
+
 
 class AuthContext:
     def __init__(self, user_id: str, tenant_id: str, roles: list[str], email: str, display_name: str = ""):
@@ -109,6 +117,17 @@ class AuthContext:
 
     @property
     def permissions(self) -> set[str]:
+        # Superuser: PLATFORM_ADMIN gets every permission that exists, not
+        # just the ones its own role entry lists. This is deliberately not
+        # "PLATFORM_ADMIN plus whatever other roles this user also has" —
+        # it's every feature, full stop, per an explicit request that this
+        # role should have no access-control restriction anywhere. Applies
+        # here (not just in has_permission below) so the frontend, which
+        # reads this same set via GET /auth/me, shows every control too
+        # instead of hiding ones gated by a permission the role wasn't
+        # otherwise individually assigned.
+        if Role.PLATFORM_ADMIN.value in self.roles:
+            return set(_ALL_PERMISSIONS)
         perms: set[str] = set()
         for role in self.roles:
             perms |= PERMISSIONS.get(role, set())

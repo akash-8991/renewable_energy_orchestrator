@@ -145,7 +145,7 @@ can decide items in Approval Inbox — everyone else sees it read-only).
 | Model Admin | `model.admin@demo-utility.test` | Model registry, eval runs, model deploys |
 | Tenant Admin | `tenant.admin@demo-utility.test` | Users, settings, connectors, policies, file ingestion |
 | Auditor / DPO | `auditor@demo-utility.test` | Evidence export, privacy, DSR |
-| Platform Admin | `platform.admin@demo-utility.test` | Everything above + tenant provisioning, platform config, break-glass |
+| Platform Admin | `platform.admin@demo-utility.test` | **Superuser — every permission that exists, not just the roles above combined** (`packages/reo_common/reo_common/security.py`'s `AuthContext.permissions` special-cases this role by design, not by accumulating individual grants) |
 
 Other useful local URLs:
 - API interactive docs: http://localhost:8000/docs
