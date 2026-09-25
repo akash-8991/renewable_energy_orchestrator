@@ -81,6 +81,7 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` |
 | Tenant Administration | `GET/POST /admin/users`, `GET/POST /admin/tenants` |
 | Platform Operations | rollups over the above; no dedicated endpoint |
+| Document Intake | `POST /ingestion/documents`, `GET /ingestion/documents`, `POST /ingestion/documents/{id}/apply-constraint` |
 | — (all pages) | `POST /auth/login`, `GET /auth/me`, `POST /ingestion/files` |
 
 ## Decision cycle (FRD §3.1)
@@ -119,3 +120,36 @@ after the initial build (see memory/session history for the full gap analysis):
   injection into the real-time simulator. `scenario_lab.py` re-solves the same 24h horizon under
   each of the six named scenarios every cycle and persists the comparison (`ScenarioRun`), surfaced
   in the Decision Centre drawer's "Scenario Comparison" tab.
+
+## Hackathon problem 4 alignment (D3: multimodal ingestion)
+
+D1/D2 (structured/textual input) were met by the original build's CSV/JSON/XLSX telemetry and
+`data/`-folder ingestion. D3 ("highly heterogeneous multimodal input") was not: nothing in the
+platform could read a scanned/photographed PDF or image, despite the BRD listing images/PDF as
+in-scope file types. Closed as its own ingestion path rather than bolted onto the telemetry one,
+because a maintenance notice or storm alert doesn't decompose into asset_id/metric/value rows —
+it has to be *read*:
+
+- `POST /ingestion/documents` (Document Intake workspace) accepts a PDF or image. `apps/api/app/
+  ingestion/document_ingest.py` renders each page to a PNG (`pypdfium2` for PDF pages, `Pillow` for
+  photos) and shows it to the same `ModelGateway.complete_structured(...)` every specialist agent
+  already uses — extended with an `images` parameter (`model_gateway.py`) so Anthropic's/OpenAI's
+  vision input rides the identical tool-forced-schema, fail-closed path (`GatewayError` on a
+  schema-invalid read, same as any other agent) rather than a separate, unvalidated OCR pipeline.
+- The extraction (`DocumentExtraction`: document_type, summary, affected asset refs *as written on
+  the page*, effective window, severity, capacity impact, confidence, a verbatim excerpt) is
+  persisted as a `DocumentIntake` row — evidence, not a decision. Consistent with the non-negotiable
+  spine (agents produce evidence, never commands), it never becomes a `Constraint` on its own.
+- A human with `manage:constraints` (portfolio_manager) reviews it and, for a real asset outage/
+  derate, explicitly maps the document's free-text asset reference onto an actual tenant `Asset` and
+  promotes it (`POST /ingestion/documents/{id}/apply-constraint`) into a real `Constraint`
+  (`capacity_derate_from_document`). `cycle.py` reads that Constraint on the *next* decision cycle
+  and derates the affected solar/wind asset's per-step forecast (`document_constraints.py`,
+  unit-tested in `test_document_constraints.py`) — so an uploaded document is a genuine input to the
+  optimizer's next plan, not just something a human can read in a UI.
+- Scoped honestly to solar/wind: the endpoint refuses to apply a document-derived constraint to a
+  battery or the grid interconnection, because the MILP only takes a time-varying capacity cap for
+  generation assets (`forecast_kw[t]`) — batteries and the grid have their own, structurally
+  different constraint handling that this change doesn't extend. Persisting an inert `Constraint`
+  row for those asset types would look "applied" in the UI while doing nothing, which is worse than
+  refusing outright. See `SIMPLIFICATIONS.md` for what this does and doesn't cover.

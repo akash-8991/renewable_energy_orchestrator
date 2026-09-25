@@ -20,6 +20,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from actions_builder import AssetRef, build_actions_for_step
+from document_constraints import apply_capacity_derates
 from forecast import generate_and_persist_forecasts
 from reo_common.autonomy import autonomous_execution_allowed, resolve_autonomy_mode
 from reo_common.config import get_settings
@@ -109,12 +110,33 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             for asset in assets:
                 if asset.asset_type in ("solar", "wind", "consumer"):
                     series = _load_forecast_series(db, tenant_id, asset.id, now, n_steps, STEP_HOURS)
-                    if asset.asset_type == "solar":
-                        solar_inputs.append(GenAssetInput(asset_id=asset.id, forecast_kw=series.q50, rated_capacity_kw=asset.rated_capacity_kw))
-                    elif asset.asset_type == "wind":
-                        wind_inputs.append(GenAssetInput(asset_id=asset.id, forecast_kw=series.q50, rated_capacity_kw=asset.rated_capacity_kw))
+                    if asset.asset_type in ("solar", "wind"):
+                        # asset-scoped constraints a portfolio manager promoted from an
+                        # uploaded document (D3 multimodal ingestion) — a real maintenance
+                        # window or storm-damage outage caps generation for its window,
+                        # not just the whole cycle, so this is applied per forecast step.
+                        derate_rows = db.execute(
+                            select(Constraint).where(
+                                Constraint.tenant_id == tenant_id,
+                                Constraint.scope == f"asset:{asset.id}",
+                                Constraint.constraint_type == "capacity_derate_from_document",
+                            )
+                        ).scalars().all()
+                        derates = [
+                            {"max_capacity_pct": c.expression.get("max_capacity_pct", 0.0), "effective_from": c.effective_from, "effective_to": c.effective_to}
+                            for c in derate_rows if c.effective_from is not None and c.effective_to is not None and c.effective_to >= now
+                        ]
+                        forecast_kw = apply_capacity_derates(
+                            series.q50, rated_capacity_kw=asset.rated_capacity_kw, now=now, step_hours=STEP_HOURS, derates=derates,
+                        )
                     else:
-                        consumer_inputs.append(ConsumerInput(asset_id=asset.id, forecast_kw=series.q50))
+                        forecast_kw = series.q50
+                    if asset.asset_type == "solar":
+                        solar_inputs.append(GenAssetInput(asset_id=asset.id, forecast_kw=forecast_kw, rated_capacity_kw=asset.rated_capacity_kw))
+                    elif asset.asset_type == "wind":
+                        wind_inputs.append(GenAssetInput(asset_id=asset.id, forecast_kw=forecast_kw, rated_capacity_kw=asset.rated_capacity_kw))
+                    else:
+                        consumer_inputs.append(ConsumerInput(asset_id=asset.id, forecast_kw=forecast_kw))
 
             # sanity check: demand should never legitimately forecast to zero
             # across a full 24h horizon (unlike solar, which is zero at

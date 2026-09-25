@@ -73,6 +73,7 @@ PERMISSIONS: dict[str, set[str]] = {
     Role.PORTFOLIO_MANAGER: {
         "read:dashboard", "read:decisions", "read:audit",
         "manage:objective_policy", "manage:scenarios", "read:economics", "ingest:files",
+        "manage:constraints",
     },
     Role.OT_ADMIN: {
         "read:dashboard", "read:decisions", "read:audit",

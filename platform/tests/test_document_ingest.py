@@ -1,0 +1,65 @@
+"""D3 multimodal ingestion: a scanned PDF or a photographed image must
+render into page images `render_pages()` can hand to the vision-capable
+ModelGateway, and the extraction must come back schema-valid (or fail
+closed) — never silently pass through free-form text, same guardrail the
+telemetry/agent pipeline already enforces."""
+
+import io
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "api"))
+
+from app.ingestion.document_ingest import DocumentExtraction, extract_document, render_pages  # noqa: E402
+from reo_common.model_gateway import MockModelGateway  # noqa: E402
+
+
+def _tiny_pdf_bytes() -> bytes:
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument.new()
+    pdf.new_page(200, 200)
+    buf = io.BytesIO()
+    pdf.save(buf)
+    pdf.close()
+    return buf.getvalue()
+
+
+def _tiny_png_bytes() -> bytes:
+    from PIL import Image
+
+    img = Image.new("RGB", (64, 64), color=(200, 40, 40))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_render_pages_from_pdf_returns_one_png_per_page():
+    pages = render_pages("maintenance-notice.pdf", _tiny_pdf_bytes())
+    assert len(pages) == 1
+    assert pages[0].startswith(b"\x89PNG")
+
+
+def test_render_pages_from_image_returns_single_page():
+    pages = render_pages("storm-alert.jpg", _tiny_png_bytes())
+    assert len(pages) == 1
+    assert pages[0].startswith(b"\x89PNG")
+
+
+def test_render_pages_rejects_unsupported_suffix():
+    with pytest.raises(ValueError, match="unsupported document type"):
+        render_pages("readings.csv", b"asset_id,metric,value\n")
+
+
+def test_extract_document_returns_schema_valid_result_via_mock_gateway():
+    pages = render_pages("inspection-report.png", _tiny_png_bytes())
+    result = extract_document(
+        MockModelGateway(), tenant_id="tenant-1", correlation_id="doc:test", filename="inspection-report.png", pages=pages,
+    )
+    assert isinstance(result, DocumentExtraction)
+    assert result.document_type in (
+        "maintenance_notice", "storm_alert", "weather_advisory", "grid_outage_notice", "inspection_report", "other",
+    )
+    assert result.severity in ("informational", "advisory", "warning", "critical")

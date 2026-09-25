@@ -7,6 +7,7 @@ const NAV = [
   { to: "/approvals", label: "Approval Inbox" },
   { to: "/signals", label: "Live Signal Monitor" },
   { to: "/connectors", label: "Connector Studio" },
+  { to: "/documents", label: "Document Intake" },
   { to: "/policy", label: "Policy Studio" },
   { to: "/simulation", label: "Simulation Lab" },
   { to: "/audit", label: "Audit & Exports" },

@@ -5,6 +5,7 @@ import ApprovalInbox from "./pages/ApprovalInbox";
 import AuditExports from "./pages/AuditExports";
 import ConnectorStudio from "./pages/ConnectorStudio";
 import DecisionCentre from "./pages/DecisionCentre";
+import DocumentIntake from "./pages/DocumentIntake";
 import LiveSignalMonitor from "./pages/LiveSignalMonitor";
 import Login from "./pages/Login";
 import PlatformOperations from "./pages/PlatformOperations";
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="/approvals" element={<ApprovalInbox />} />
         <Route path="/signals" element={<LiveSignalMonitor />} />
         <Route path="/connectors" element={<ConnectorStudio />} />
+        <Route path="/documents" element={<DocumentIntake />} />
         <Route path="/policy" element={<PolicyStudio />} />
         <Route path="/simulation" element={<SimulationLab />} />
         <Route path="/audit" element={<AuditExports />} />

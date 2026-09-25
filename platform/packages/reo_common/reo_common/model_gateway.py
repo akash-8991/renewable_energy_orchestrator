@@ -66,8 +66,19 @@ class ModelGateway(ABC):
     provider_name: str = "abstract"
 
     @abstractmethod
-    def _raw_call(self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str) -> str:
-        """Return raw JSON text from the underlying provider."""
+    def _raw_call(
+        self,
+        *,
+        system_prompt: str,
+        user_content: str,
+        json_schema: dict,
+        schema_name: str,
+        images: list[tuple[bytes, str]] | None = None,
+    ) -> str:
+        """Return raw JSON text from the underlying provider. `images`, when
+        given, is a list of (raw_bytes, media_type) pairs — e.g. rendered
+        pages of a scanned document — sent alongside `user_content` for
+        providers with vision support (D3: heterogeneous multimodal input)."""
 
     def complete_structured(
         self,
@@ -79,6 +90,7 @@ class ModelGateway(ABC):
         user_content: str,
         response_model: type[T],
         tool_allowlist: list[str] | None = None,
+        images: list[tuple[bytes, str]] | None = None,
     ) -> tuple[T, ModelCallRecord]:
         schema = response_model.model_json_schema()
         schema_name = response_model.__name__
@@ -100,6 +112,7 @@ class ModelGateway(ABC):
                     user_content=user_content,
                     json_schema=schema,
                     schema_name=schema_name,
+                    images=images,
                 )
                 parsed = response_model.model_validate_json(raw)
                 latency_ms = (time.perf_counter() - start) * 1000
@@ -139,19 +152,31 @@ class AnthropicModelGateway(ModelGateway):
         self.model_name = model or settings.anthropic_model
         self._client = anthropic.Anthropic(api_key=api_key or settings.anthropic_api_key)
 
-    def _raw_call(self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str) -> str:
+    def _raw_call(
+        self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str,
+        images: list[tuple[bytes, str]] | None = None,
+    ) -> str:
+        import base64
+
         tool = {
             "name": f"emit_{schema_name.lower()}",
             "description": f"Emit the {schema_name} structured result. This is the ONLY way to respond.",
             "input_schema": json_schema,
         }
+        content: list[dict] = []
+        for data, media_type in images or []:
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": media_type, "data": base64.b64encode(data).decode("ascii")},
+            })
+        content.append({"type": "text", "text": user_content})
         resp = self._client.messages.create(
             model=self.model_name,
             max_tokens=4096,
             system=system_prompt,
             tools=[tool],
             tool_choice={"type": "tool", "name": tool["name"]},
-            messages=[{"role": "user", "content": user_content}],
+            messages=[{"role": "user", "content": content}],
         )
         for block in resp.content:
             if block.type == "tool_use":
@@ -168,12 +193,21 @@ class OpenAIModelGateway(ModelGateway):
         self.model_name = model or settings.openai_model
         self._client = OpenAI(api_key=api_key or settings.openai_api_key)
 
-    def _raw_call(self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str) -> str:
+    def _raw_call(
+        self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str,
+        images: list[tuple[bytes, str]] | None = None,
+    ) -> str:
+        import base64
+
+        user_content_parts: list[dict] = [{"type": "text", "text": user_content}]
+        for data, media_type in images or []:
+            b64 = base64.b64encode(data).decode("ascii")
+            user_content_parts.append({"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}})
         resp = self._client.chat.completions.create(
             model=self.model_name,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
+                {"role": "user", "content": user_content_parts if images else user_content},
             ],
             response_format={
                 "type": "json_schema",
@@ -190,7 +224,10 @@ class MockModelGateway(ModelGateway):
     provider_name = "mock"
     model_name = "mock-deterministic-v1"
 
-    def _raw_call(self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str) -> str:
+    def _raw_call(
+        self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str,
+        images: list[tuple[bytes, str]] | None = None,
+    ) -> str:
         return json.dumps(_mock_instance_for_schema(json_schema))
 
 

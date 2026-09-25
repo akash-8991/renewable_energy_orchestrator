@@ -23,6 +23,35 @@ component would sit behind, so swapping one in later is an infrastructure change
 | Maker-checker on every governance action | Implemented for Connector Studio activation (creator ≠ activator, enforced in `Connector.status` transitions) and high-risk approvals (`Approval.requires_second_approver`) | These are the two places the spec calls out four-eyes explicitly | Extend the same pattern to any other action by adding a `*_by` pair and a status-transition check |
 | Real external IdP / SSO | OIDC client wired, testable against any dev IdP (e.g. free Keycloak/Auth0 tenant) | No production IdP to point at during this build | Set `oidc_issuer` etc.; no code change |
 
+## Known tracked item: document intake (D3 multimodal ingestion)
+
+`POST /ingestion/documents` reads scanned PDFs/photographed images via the same `ModelGateway`
+vision path every specialist agent uses (`document_ingest.py`), but the following are deliberate,
+documented limits rather than silent gaps:
+
+- **No dedicated OCR fallback.** Extraction quality depends entirely on the underlying model's
+  vision capability (Claude by default). There's no separate Tesseract/OCR pass to cross-check
+  against — consistent with the rest of the agent layer's design (the model gateway *is* the
+  reading mechanism), but worth knowing if a document is extremely low-quality.
+- **Only solar/wind assets can receive a document-derived constraint.** The MILP takes a
+  per-step generation cap for solar/wind (`forecast_kw[t]`) but batteries and the grid
+  interconnection have their own, structurally different constraint handling that wasn't
+  extended in this pass. `apply-constraint` refuses other asset types with a clear 400 rather
+  than silently persisting a `Constraint` row the optimizer never reads.
+- **Indirect prompt injection via the document image itself is not specially hardened beyond
+  what the rest of the agent layer already does.** The system prompt instructs the model to treat
+  in-image text as content to report on, not as instructions, and the extraction still goes
+  through the same tool-forced, schema-validated, fail-closed path as any other agent call — but
+  there's no separate image-level content-moderation pass. The bigger mitigation is architectural,
+  not prompt-level: the extraction is evidence only, and a human must explicitly map a free-text
+  asset reference onto a real `Asset` before anything derived from the document can affect a
+  decision.
+- **Real vision reasoning wasn't exercised against the live Anthropic API this session** — the
+  local/demo deployment defaults to `MODEL_PROVIDER=mock` (no API key configured), same as every
+  other agent. Verified via the mock gateway (schema-valid extraction, correct plumbing end to
+  end: render → extract → persist → audit → apply → optimizer derate, confirmed against live DB
+  data) and via unit tests; not verified against a real photographed document with real API calls.
+
 ## Known tracked item: frontend dependency advisories
 
 `npm audit` flags moderate/high advisories in `vite`/`esbuild` (dev-server-only request forwarding,
@@ -37,7 +66,7 @@ dedicated follow-up pass.
 ## What is *not* simplified
 
 Built with real logic end to end, calling live services where configured: ingestion (file/DB/
-REST/streaming), the digital twin, forecasting, the deterministic MILP optimizer + independent
+REST/streaming/multimodal PDF+image via vision), the digital twin, forecasting, the deterministic MILP optimizer + independent
 feasibility validator, all specialist agents calling Anthropic Claude through a schema-validated
 model gateway, the policy/safety engine's four autonomy modes, the OT gateway's independent
 pre-dispatch revalidation, the append-only hash-chained decision/audit ledger, approvals, Connector

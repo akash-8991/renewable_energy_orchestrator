@@ -600,6 +600,51 @@ class ScenarioRun(Base):
 register_tenant_scoped(ScenarioRun)
 
 
+class DocumentIntake(Base):
+    """A scanned/photographed PDF or image (maintenance notice, storm/weather
+    advisory, grid outage notice, inspection report) read via the same
+    ModelGateway every specialist agent uses, but with vision — this is the
+    "highly heterogeneous multimodal input" capability (hackathon problem 4,
+    solution depth D3), which the platform previously only accepted as
+    CSV/JSON/XLSX telemetry rows.
+
+    The extraction is evidence only: it never becomes a Constraint on its
+    own. A human with `manage:constraints` reviews it and, if it's a real
+    asset outage/derate, explicitly promotes it via `constraint_id` — kept
+    consistent with the non-negotiable rule that agents produce evidence,
+    never commands.
+    """
+
+    __tablename__ = "document_intakes"
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = tenant_fk()
+    filename: Mapped[str] = mapped_column(String(300))
+    content_type: Mapped[str] = mapped_column(String(120))
+    checksum: Mapped[str] = mapped_column(String(64), index=True)
+    page_count: Mapped[int] = mapped_column(Integer, default=1)
+    document_type: Mapped[str] = mapped_column(String(40))
+    summary: Mapped[str] = mapped_column(Text)
+    affected_asset_refs: Mapped[list] = mapped_column(JSONB, default=list)
+    effective_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    severity: Mapped[str] = mapped_column(String(20))
+    capacity_impact_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    raw_excerpt: Mapped[str] = mapped_column(Text, default="")
+    model_provider: Mapped[str] = mapped_column(String(40), default="unknown")
+    status: Mapped[str] = mapped_column(String(20), default="extracted")  # extracted|applied|dismissed
+    constraint_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("constraints.id"), nullable=True)
+    applied_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    uploaded_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_document_intakes_tenant_created", "tenant_id", "created_at"),)
+
+
+register_tenant_scoped(DocumentIntake)
+
+
 # ---------------------------------------------------------------------------
 # Audit (tamper-evident, hash-chained; tenant_id nullable for platform events)
 # ---------------------------------------------------------------------------
