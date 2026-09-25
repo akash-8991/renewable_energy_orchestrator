@@ -151,9 +151,17 @@ spends zero tokens — not a post-hoc throttle. Tune with `MODEL_RATE_LIMIT_PER_
 
 ## Running tests
 
+`packages/reo_common` requires **Python 3.11+** (it's a pyproject.toml-only package — no
+`setup.py` — so it also needs a reasonably modern pip). On macOS the `python3` on `PATH` is often
+Apple's bundled 3.9.x, which fails partway through install with a confusing error, so name the
+interpreter explicitly (`python3.11`/`python3.12`/`python3.13`, `brew install python@3.12` if you
+don't have one). Also run every command below from `platform/` — `pip install -e packages/reo_common`
+resolves that path relative to your current directory, and fails with *"is not a valid editable
+requirement"* if you're anywhere else (e.g. still in `infrastructure/`).
+
 ```bash
 cd platform
-python3 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e packages/reo_common
 pip install -r backend/requirements.txt -r policy/requirements.txt -r agent/requirements.txt
 pip install pytest

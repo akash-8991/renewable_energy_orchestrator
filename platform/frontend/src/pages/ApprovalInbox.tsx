@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api/client";
 import Badge from "../components/Badge";
+import { useAuth } from "../auth/AuthContext";
 
 interface Approval {
   id: string; decision_id: string; action_id: string | null; outcome: string;
@@ -10,6 +11,8 @@ interface Approval {
 
 export default function ApprovalInbox() {
   const qc = useQueryClient();
+  const { hasPermission } = useAuth();
+  const canDecide = hasPermission("approve:assigned");
   const [error, setError] = useState<string | null>(null);
   const { data, isLoading } = useQuery<Approval[]>({
     queryKey: ["approvals", "pending"],
@@ -31,13 +34,19 @@ export default function ApprovalInbox() {
     <div>
       <h2 style={{ fontSize: 15 }}>Approval Inbox</h2>
       <p className="muted">Actions awaiting human sign-off before they can be dispatched to the OT command gateway.</p>
+      {!canDecide && (
+        <div className="empty-state">
+          Your role can view this queue but can't decide approvals — that needs the Operator or
+          Senior Operator role.
+        </div>
+      )}
       {error && <div className="error-banner">{error}</div>}
       {isLoading && <div className="empty-state">Loading...</div>}
       {data && data.length === 0 && <div className="empty-state">Nothing pending approval right now.</div>}
       {data && data.length > 0 && (
         <table>
           <thead>
-            <tr><th>Requested</th><th>Decision</th><th>Action</th><th>Four-eyes</th><th>Expires</th><th></th></tr>
+            <tr><th>Requested</th><th>Decision</th><th>Action</th><th>Four-eyes</th><th>Expires</th>{canDecide && <th></th>}</tr>
           </thead>
           <tbody>
             {data.map((a) => (
@@ -47,17 +56,19 @@ export default function ApprovalInbox() {
                 <td className="mono">{a.action_id?.slice(0, 8) || "—"}</td>
                 <td>{a.requires_second_approver ? <Badge text="required" /> : "—"}</td>
                 <td>{new Date(a.expires_at).toLocaleTimeString()}</td>
-                <td className="row">
-                  <button onClick={() => decide.mutate({ id: a.id, outcome: "approved" })} disabled={decide.isPending}>
-                    Approve
-                  </button>
-                  <button className="secondary" onClick={() => decide.mutate({ id: a.id, outcome: "held" })} disabled={decide.isPending}>
-                    Hold
-                  </button>
-                  <button className="danger" onClick={() => decide.mutate({ id: a.id, outcome: "rejected" })} disabled={decide.isPending}>
-                    Reject
-                  </button>
-                </td>
+                {canDecide && (
+                  <td className="row">
+                    <button onClick={() => decide.mutate({ id: a.id, outcome: "approved" })} disabled={decide.isPending}>
+                      Approve
+                    </button>
+                    <button className="secondary" onClick={() => decide.mutate({ id: a.id, outcome: "held" })} disabled={decide.isPending}>
+                      Hold
+                    </button>
+                    <button className="danger" onClick={() => decide.mutate({ id: a.id, outcome: "rejected" })} disabled={decide.isPending}>
+                      Reject
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

@@ -169,7 +169,7 @@ function DecisionDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           )}
           {tab === "scenarios" && <ScenarioComparisonTab decisionId={id} />}
           {tab === "plan" && (
-            <pre className="mono" style={{ background: "#0e1526", padding: 12, borderRadius: 8, overflow: "auto", maxHeight: 400 }}>
+            <pre className="mono" style={{ background: "var(--bg-code)", border: "1px solid var(--border)", padding: 12, borderRadius: 8, overflow: "auto", maxHeight: 400 }}>
               {JSON.stringify(data.plan, null, 2)}
             </pre>
           )}
