@@ -42,11 +42,27 @@ class Settings(BaseSettings):
     secrets_provider: str = "local"  # local | aws
 
     # Model gateway
-    model_provider: str = "mock"  # anthropic | openai | mock
+    model_provider: str = "mock"  # openrouter | anthropic | openai | mock
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o"
+    # OpenRouter (https://openrouter.ai) — single OpenAI-compatible endpoint in
+    # front of many providers/models. Default provider as of this deployment;
+    # see reo_common/model_gateway.py's OpenRouterModelGateway.
+    openrouter_api_key: str | None = None
+    openrouter_model: str = "openai/gpt-4o-mini"
+    openrouter_site_url: str | None = None  # optional, sent as HTTP-Referer for OpenRouter's app attribution
+    openrouter_site_name: str = "Renewable Energy Orchestrator"  # sent as X-Title
+
+    # Model call rate limiting (token-conservation guardrail, not just abuse
+    # prevention) — a Redis-backed, per-tenant counter enforced in
+    # ModelGateway.complete_structured *before* any provider call is made, so
+    # a call that would exceed budget spends zero tokens. Applied to every
+    # non-mock provider automatically by get_model_gateway(); the mock
+    # gateway is exempt (zero-cost, and heavily used in tests with no Redis).
+    model_rate_limit_per_minute: int = 20
+    model_rate_limit_per_day: int = 2000
 
     # Data ingestion
     data_watch_dir: str = "/data"

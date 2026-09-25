@@ -3,17 +3,23 @@
 Every specialist agent calls `ModelGateway.complete_structured(...)` with a
 Pydantic schema describing exactly the JSON shape it is allowed to return.
 The gateway:
-  - forces the underlying model to emit that schema (Anthropic tool-forcing),
+  - forces the underlying model to emit that schema (Anthropic tool-forcing,
+    or OpenAI/OpenRouter-style `response_format: json_schema` strict mode),
   - validates the result server-side (a model that "almost" matches is a
     schema failure, not a warning),
   - retries once, then fails closed (`GatewayError`) rather than passing
     through free-form text,
+  - is gated by a per-tenant Redis rate limit *before* any provider call is
+    made (see `rate_limiter`/`reo_common.rate_limit`) — a blocked call spends
+    zero tokens, it's not a post-hoc throttle,
   - logs model/version/tokens/latency for every call (TRD §5 guardrail),
   - never receives raw secrets/credentials — callers redact/tokenise first.
 
-Three implementations: Anthropic (default per user's choice), OpenAI
-(portability stub), and Mock (deterministic, zero-cost, used for tests and
-whenever no API key is configured so the whole pipeline still runs).
+Four implementations: OpenRouter (default — a single OpenAI-compatible
+endpoint in front of many providers/models, https://openrouter.ai),
+Anthropic (direct), OpenAI (direct), and Mock (deterministic, zero-cost,
+used for tests and whenever no API key is configured so the whole pipeline
+still runs).
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from typing import Callable, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from .config import get_settings
+from .rate_limit import ModelCallRateLimiter
 
 logger = logging.getLogger("reo.model_gateway")
 settings = get_settings()
@@ -47,6 +54,15 @@ class GatewayError(RuntimeError):
     """Raised when the model fails to produce a schema-valid response after
     retry — callers must fail closed (downgrade autonomy / mark
     INSUFFICIENT_EVIDENCE), never fabricate a result."""
+
+
+class RateLimitExceeded(GatewayError):
+    """Raised when a call is blocked by the token-conservation rate limiter
+    *before* it reaches the provider — a subclass of GatewayError so every
+    existing `except GatewayError` call site already fails closed on it
+    correctly with no code changes needed, but distinguishable by type/
+    message for callers that want to react differently (e.g. not retrying
+    immediately, unlike a schema-validity failure)."""
 
 
 class ModelCallRecord(BaseModel):
@@ -81,6 +97,14 @@ class ModelGateway(ABC):
     #: the many tests that don't care about persistence.
     on_call_record: "Callable[[ModelCallRecord], None] | None" = None
 
+    #: Set by `get_model_gateway()` for every non-mock provider (a
+    #: `reo_common.rate_limit.ModelCallRateLimiter`) — checked at the top of
+    #: `complete_structured` before any provider call. Left unset for
+    #: `MockModelGateway` (zero-cost, no Redis needed for tests) and left
+    #: settable/overridable here for anything constructing a gateway
+    #: directly, same pattern as `on_call_record`.
+    rate_limiter: "ModelCallRateLimiter | None" = None
+
     @abstractmethod
     def _raw_call(
         self,
@@ -109,6 +133,19 @@ class ModelGateway(ABC):
         tool_allowlist: list[str] | None = None,
         images: list[tuple[bytes, str]] | None = None,
     ) -> tuple[T, ModelCallRecord]:
+        if self.rate_limiter is not None:
+            allowed, reason = self.rate_limiter.allow(agent=agent, tenant_id=tenant_id)
+            if not allowed:
+                record = ModelCallRecord(
+                    agent=agent, tenant_id=tenant_id, correlation_id=correlation_id,
+                    provider=self.provider_name, model=getattr(self, "model_name", "unknown"),
+                    latency_ms=0.0, schema_valid=False, retried=False, error=f"rate_limited: {reason}",
+                )
+                logger.warning("model_call_rate_limited", extra={"record": record.model_dump()})
+                if self.on_call_record:
+                    self.on_call_record(record)
+                raise RateLimitExceeded(reason or f"{agent}: rate limit exceeded")
+
         schema = response_model.model_json_schema()
         schema_name = response_model.__name__
 
@@ -217,13 +254,27 @@ class AnthropicModelGateway(ModelGateway):
 
 
 class OpenAIModelGateway(ModelGateway):
+    """OpenAI's own API — also the base class for `OpenRouterModelGateway`,
+    since OpenRouter deliberately mirrors the OpenAI chat-completions wire
+    format (including `response_format: json_schema` strict mode) regardless
+    of which underlying model it's proxying to. Subclasses only need to
+    change where the client points and what headers it sends, not the
+    request/response handling itself."""
+
     provider_name = "openai"
 
-    def __init__(self, api_key: str | None = None, model: str | None = None):
+    def __init__(
+        self, api_key: str | None = None, model: str | None = None,
+        base_url: str | None = None, default_headers: dict | None = None,
+    ):
         from openai import OpenAI
 
         self.model_name = model or settings.openai_model
-        self._client = OpenAI(api_key=api_key or settings.openai_api_key)
+        self._client = OpenAI(
+            api_key=api_key or settings.openai_api_key,
+            base_url=base_url,
+            default_headers=default_headers or None,
+        )
 
     def _raw_call(
         self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str,
@@ -241,9 +292,20 @@ class OpenAIModelGateway(ModelGateway):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content_parts if images else user_content},
             ],
+            # strict:True would additionally require OpenAI's own structural
+            # rules on every schema (every property in `required`, explicit
+            # `additionalProperties: false` on every object, no plain
+            # Optional[...] fields) — rules Anthropic's tool-forcing never
+            # needed, so the ~15 response models across every agent weren't
+            # written to them. Rather than rewrite every schema to satisfy
+            # one provider's strict-mode validator, this stays provider-
+            # agnostic: the model gets the schema as strong guidance,
+            # and our own `model_validate_json(...)` + retry-then-fail-closed
+            # (complete_structured, above) is what actually enforces
+            # correctness — the same safety net regardless of provider.
             response_format={
                 "type": "json_schema",
-                "json_schema": {"name": schema_name, "schema": json_schema, "strict": True},
+                "json_schema": {"name": schema_name, "schema": json_schema, "strict": False},
             },
         )
         usage = getattr(resp, "usage", None)
@@ -251,6 +313,35 @@ class OpenAIModelGateway(ModelGateway):
             raw_json=resp.choices[0].message.content or "{}",
             input_tokens=getattr(usage, "prompt_tokens", None),
             output_tokens=getattr(usage, "completion_tokens", None),
+        )
+
+
+class OpenRouterModelGateway(OpenAIModelGateway):
+    """OpenRouter (https://openrouter.ai) — one OpenAI-wire-format endpoint
+    routing to many providers/models by name (e.g. "openai/gpt-4o-mini",
+    "anthropic/claude-3.5-sonnet"). This is the default production provider
+    for this deployment: point `model` at whichever underlying model is
+    wanted without touching any calling code, since every agent only ever
+    talks to `ModelGateway.complete_structured(...)`.
+
+    Sends OpenRouter's optional `HTTP-Referer`/`X-Title` attribution
+    headers when configured (`OPENROUTER_SITE_URL`/`OPENROUTER_SITE_NAME`) —
+    these identify the app on OpenRouter's own leaderboard/logs, not an
+    auth mechanism. `response_format: json_schema` strict-mode support
+    depends on the specific underlying model OpenRouter routes to; the
+    default model (`openai/gpt-4o-mini`) supports it natively."""
+
+    provider_name = "openrouter"
+
+    def __init__(self, api_key: str | None = None, model: str | None = None):
+        headers = {"X-Title": settings.openrouter_site_name}
+        if settings.openrouter_site_url:
+            headers["HTTP-Referer"] = settings.openrouter_site_url
+        super().__init__(
+            api_key=api_key or settings.openrouter_api_key,
+            model=model or settings.openrouter_model,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers=headers,
         )
 
 
@@ -278,8 +369,8 @@ class MockModelGateway(ModelGateway):
 def _mock_instance_for_schema(schema: dict) -> dict:
     """Build a minimal, schema-valid instance by walking a JSON Schema. Good
     enough for deterministic tests and a keyless demo mode — not a substitute
-    for real reasoning, which is why `model_provider=anthropic` is the
-    documented production configuration."""
+    for real reasoning, which is why `model_provider=openrouter` (or another
+    real provider) is the documented production configuration."""
 
     def build(node: dict, defs: dict) -> object:
         if "$ref" in node:
@@ -312,12 +403,32 @@ def _mock_instance_for_schema(schema: dict) -> dict:
     return build(schema, defs)  # type: ignore[return-value]
 
 
+def _attach_rate_limiter(gateway: ModelGateway) -> ModelGateway:
+    try:
+        import redis as redis_lib
+
+        client = redis_lib.from_url(settings.redis_url, decode_responses=True)
+        gateway.rate_limiter = ModelCallRateLimiter(
+            client, per_minute=settings.model_rate_limit_per_minute, per_day=settings.model_rate_limit_per_day,
+        )
+    except Exception:
+        # Rate limiting is a token-conservation guardrail, not a hard
+        # dependency — if Redis itself can't be reached at construction
+        # time, proceed unlimited rather than refuse to run at all (the
+        # limiter's own `allow()` already fails open on a per-call Redis
+        # error for the same reason).
+        logger.warning("could not construct model-call rate limiter (Redis unreachable) — proceeding unlimited", exc_info=True)
+    return gateway
+
+
 def get_model_gateway() -> ModelGateway:
     provider = settings.model_provider
+    if provider == "openrouter" and settings.openrouter_api_key:
+        return _attach_rate_limiter(OpenRouterModelGateway())
     if provider == "anthropic" and settings.anthropic_api_key:
-        return AnthropicModelGateway()
+        return _attach_rate_limiter(AnthropicModelGateway())
     if provider == "openai" and settings.openai_api_key:
-        return OpenAIModelGateway()
-    if provider in ("anthropic", "openai"):
+        return _attach_rate_limiter(OpenAIModelGateway())
+    if provider in ("openrouter", "anthropic", "openai"):
         logger.warning("model_provider=%s but no API key configured — falling back to mock gateway", provider)
     return MockModelGateway()

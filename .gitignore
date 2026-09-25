@@ -20,3 +20,14 @@ build/
 *.tfstate.*
 .terraform.lock.hcl
 platform/infra/terraform/*.tfvars
+
+# Reference docs containing a live API key in plaintext (OpenRouter) — the
+# key itself lives only in the gitignored .env files, never here.
+Open_Router.docx
+Open_Router_API.docx
+
+# Raw reference dataset (100+MB of CSVs) — mounted read-only into the api
+# container (see infra/docker-compose.yml's `../../data:/data:ro`), not
+# meant to live in git history. See docs/DATA_INGESTION.md for what's done
+# with it and how to point the platform at your own copy.
+/data/

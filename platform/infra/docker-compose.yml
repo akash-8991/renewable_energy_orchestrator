@@ -10,6 +10,21 @@ x-python-env: &python-env
   S3_REGION: eu-west-1
   DATA_WATCH_DIR: /data
   ENVIRONMENT: local
+  # Model gateway — shared across every service since both agent-worker (all
+  # specialist agents) and api (document-intake vision, apps/api/app/routers
+  # /ingestion.py) construct a ModelGateway. A service that never calls
+  # get_model_gateway() simply ignores these.
+  MODEL_PROVIDER: ${MODEL_PROVIDER:-mock}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+  OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-}
+  OPENROUTER_SITE_NAME: ${OPENROUTER_SITE_NAME:-Renewable Energy Orchestrator}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+  MODEL_RATE_LIMIT_PER_MINUTE: ${MODEL_RATE_LIMIT_PER_MINUTE:-20}
+  MODEL_RATE_LIMIT_PER_DAY: ${MODEL_RATE_LIMIT_PER_DAY:-2000}
 
 services:
   postgres:
@@ -92,11 +107,7 @@ services:
 
   agent-worker:
     build: { context: ../.., dockerfile: platform/apps/agent-worker/Dockerfile }
-    environment:
-      <<: *python-env
-      MODEL_PROVIDER: ${MODEL_PROVIDER:-mock}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+    environment: *python-env
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
