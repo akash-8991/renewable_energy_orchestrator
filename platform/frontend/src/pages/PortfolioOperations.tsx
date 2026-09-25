@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import Badge from "../components/Badge";
+import DecisionSummary from "../components/DecisionSummary";
 import PortfolioTrendChart from "../components/PortfolioTrendChart";
 
 interface AssetSnapshot {
@@ -72,6 +73,8 @@ export default function PortfolioOperations() {
       </div>
 
       <PortfolioTrendChart />
+
+      <DecisionSummary />
 
       {(portfolios || []).map((p) => (
         <div key={p.id} style={{ marginBottom: 24 }}>

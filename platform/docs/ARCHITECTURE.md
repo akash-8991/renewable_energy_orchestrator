@@ -78,8 +78,9 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 
 | Workspace (web) | Primary endpoints |
 |---|---|
-| Portfolio Operations | `GET /twin/portfolio`, `GET /twin/batteries`, `GET /twin/assets/{id}/telemetry` |
+| Portfolio Operations | `GET /twin/portfolio`, `GET /twin/batteries`, `GET /twin/assets/{id}/telemetry`, `GET /twin/trend` (chart), `GET /decisions` (recent-decisions summary, `limit=5`) |
 | Decision Centre | `GET /decisions`, `GET /decisions/{id}`, `GET /decisions/{id}/scenario-runs` |
+| Customer Decisions | `GET /twin/portfolio` (consumer-asset picker), `GET /actions?asset_id=`, `GET /decisions/{id}` |
 | Approval Inbox | `GET /governance/approvals`, `POST /governance/approvals/{id}/decide` |
 | Live Signal Monitor | `GET /signals` |
 | Action Tickets | `GET /actions` |
