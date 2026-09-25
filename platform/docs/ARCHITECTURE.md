@@ -39,14 +39,19 @@ engine and (for anything but the lowest-risk bounded actions) a human approval.
 
 | Service | Primary spec sections | Canonical entities it owns |
 |---|---|---|
-| `apps/api` | FRD (all modules), TRD §11 (platform services), doc 05 §10 (platform architecture extension) | Tenant, User, Portfolio, Site, Asset, Battery, Decision, Action, Approval, Connector, CredentialRef, ExportJob, AuditEvent, DocumentIntake, AgentCallLog, AgentEvalRun |
-| `apps/optimizer-worker` | TRD §4 (optimisation requirements), doc 05 ADR-001, hackathon problem 4 F1/F3 | reads Constraint/ObjectivePolicy/Forecast, writes Decision.plan, Action, ScenarioRun |
-| `apps/agent-worker` | doc 07 (Prompt and Agent Design, in full) | writes Decision.reasoning, Decision.risk_flags, AgentCallLog, AgentEvalRun (also runs `eval_harness.py` on `reo.eval.request`) |
-| `apps/ot-gateway-sim` | doc 05 §7 (Safety architecture), TR-OT-01 | writes Command, updates Signal.state |
-| `apps/edge-simulator` | BRD reference portfolio (5 solar/3 wind/2 BESS), TRD §7 (industrial protocols) | writes Telemetry |
-| `apps/export-worker` | FR-EXP-001/002, TR-EXP-01 | writes ExportJob, reads reporting projections |
-| `apps/web` | PRD §5/§9 (dashboard pages / platform workspaces) | — |
-| `packages/reo_common` | TRD §3 (canonical model), TRD §5/§6 (agent guardrails), TR-AUTH-01/SSRF-01 | shared models, tenancy enforcement, model gateway, secrets provider |
+| `backend` | FRD (all modules), TRD §11 (platform services), doc 05 §10 (platform architecture extension) | Tenant, User, Portfolio, Site, Asset, Battery, Decision, Action, Approval, Connector, CredentialRef, ExportJob, AuditEvent, DocumentIntake, AgentCallLog, AgentEvalRun |
+| `policy` | TRD §4 (optimisation requirements), doc 05 ADR-001, hackathon problem 4 F1/F3 | reads Constraint/ObjectivePolicy/Forecast, writes Decision.plan, Action, ScenarioRun |
+| `agent` | doc 07 (Prompt and Agent Design, in full) | writes Decision.reasoning, Decision.risk_flags, AgentCallLog, AgentEvalRun (also runs `eval_harness.py` on `reo.eval.request`) |
+| `guardrails/ot-gateway-sim` | doc 05 §7 (Safety architecture), TR-OT-01 | writes Command, updates Signal.state |
+| `infrastructure/edge-simulator` | BRD reference portfolio (5 solar/3 wind/2 BESS), TRD §7 (industrial protocols) | writes Telemetry |
+| `output/export-worker` | FR-EXP-001/002, TR-EXP-01 | writes ExportJob, reads reporting projections |
+| `frontend` | PRD §5/§9 (dashboard pages / platform workspaces) | — |
+| `models` | TRD §3 (canonical model) | the canonical SQLAlchemy schema itself (`models/canonical.py`) — every table in the platform |
+| `database` | TRD §3, FR-MT-001 (tenant isolation) | DB connection/session layer + tenant-scoping event listener (`database/connection.py`), Alembic migrations, seed script |
+| `guardrails` | BR-03 (independent validator), TR-SSRF-01, TRD §5/§6 (agent guardrails) | validator.py, ssrf.py, rate_limit.py, pii.py — safety/validation logic, structurally separate from what it checks |
+| `evaluation` | doc 07 (agent evaluation), TRD §5 (guardrail logging) | AgentCallLog/AgentEvalRun persistence + the fixed-scenario eval harness |
+| `output` | FR-AU-001 (audit), FR-EXP-001/002 | the hash-chained audit log (`output/audit.py`) + Excel export worker |
+| `packages/reo_common` | TR-AUTH-01, doc 07 (model gateway) | config, vendor-neutral model gateway, Redis event bus, JWT/RBAC auth, secrets vault, digital-twin helpers — cross-cutting code every service above depends on |
 
 ## Tenant isolation (BR-07 / FR-MT-001)
 
@@ -64,7 +69,7 @@ Every specialist agent calls `ModelGateway.complete_structured(...)` with a Pyda
 The gateway forces the underlying model (Anthropic Claude by default) to emit exactly that JSON
 shape via tool-forcing, validates server-side, retries once, then fails closed
 (`GatewayError`) — a schema-invalid response is never passed through as if it were valid evidence.
-See `apps/agent-worker/agents/` for the 9 specialist agents (data_quality, forecast, asset, market,
+See `agent/agents/` for the 9 specialist agents (data_quality, forecast, asset, market,
 grid, optimisation_reviewer, risk_critic, governance, explanation) and the exact prompts from doc 07
 §2-§5. The 10th role in doc 07 §3, "Orchestrator", is implemented as the deterministic pipeline code
 in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py`'s docstring for why.
@@ -134,7 +139,7 @@ in-scope file types. Closed as its own ingestion path rather than bolted onto th
 because a maintenance notice or storm alert doesn't decompose into asset_id/metric/value rows —
 it has to be *read*:
 
-- `POST /ingestion/documents` (Document Intake workspace) accepts a PDF or image. `apps/api/app/
+- `POST /ingestion/documents` (Document Intake workspace) accepts a PDF or image. `backend/app/
   ingestion/document_ingest.py` renders each page to a PNG (`pypdfium2` for PDF pages, `Pillow` for
   photos) and shows it to the same `ModelGateway.complete_structured(...)` every specialist agent
   already uses — extended with an `images` parameter (`model_gateway.py`) so Anthropic's/OpenAI's

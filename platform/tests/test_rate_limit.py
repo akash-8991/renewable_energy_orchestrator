@@ -12,7 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "packages" / "reo_common"))
 
 from reo_common.model_gateway import ModelGateway, RateLimitExceeded, RawCallResult  # noqa: E402
-from reo_common.rate_limit import ModelCallRateLimiter  # noqa: E402
+from guardrails.rate_limit import ModelCallRateLimiter  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 

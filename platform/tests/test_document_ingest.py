@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "api"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from app.ingestion.document_ingest import DocumentExtraction, extract_document, render_pages  # noqa: E402
 from reo_common.model_gateway import MockModelGateway  # noqa: E402

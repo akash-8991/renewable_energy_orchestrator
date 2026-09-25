@@ -6,7 +6,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "optimizer-worker"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "policy"))
 
 from document_constraints import apply_capacity_derates  # noqa: E402
 

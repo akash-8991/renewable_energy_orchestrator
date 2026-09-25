@@ -4,9 +4,9 @@ risk within the policy's ceiling (doc 05 §7)."""
 
 from datetime import datetime, timedelta, timezone
 
-from reo_common.autonomy import DEFAULT_MODE, autonomous_execution_allowed, classify_risk, resolve_autonomy_mode
-from reo_common.db import reset_current_tenant, set_current_tenant
-from reo_common.models import AutonomyPolicy
+from policy.engine.autonomy import DEFAULT_MODE, autonomous_execution_allowed, classify_risk, resolve_autonomy_mode
+from database.connection import reset_current_tenant, set_current_tenant
+from models.canonical import AutonomyPolicy
 
 
 def test_classify_risk_scales_with_utilisation():

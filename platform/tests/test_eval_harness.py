@@ -7,7 +7,8 @@ must be reported as skipped, never as a misleading failure."""
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "agent-worker"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "evaluation"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "agent"))  # eval_harness.py imports agents.* / context flat, same as agent-worker's own PYTHONPATH
 
 from eval_harness import EVAL_CASES, run_eval_suite  # noqa: E402
 from reo_common.model_gateway import MockModelGateway  # noqa: E402

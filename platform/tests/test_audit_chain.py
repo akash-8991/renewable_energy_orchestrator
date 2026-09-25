@@ -1,8 +1,8 @@
 """FR-AU-001 / TR-AUD-01: the audit log must be tamper-evident — a row edited
 after the fact breaks the hash chain at that point."""
 
-from reo_common.audit import append_audit_event, verify_chain
-from reo_common.models import AuditEvent
+from output.audit import append_audit_event, verify_chain
+from models.canonical import AuditEvent
 from sqlalchemy import select
 
 

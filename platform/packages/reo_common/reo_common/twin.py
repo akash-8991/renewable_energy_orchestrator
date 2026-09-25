@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .models import Telemetry
+from models.canonical import Telemetry
 
 # A reading older than this is "stale but usable with reduced confidence";
 # older than STALE_BAD_SECONDS and it can no longer back a decision (FRD §3.2

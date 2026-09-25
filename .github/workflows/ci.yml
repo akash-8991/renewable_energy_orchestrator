@@ -34,6 +34,7 @@ jobs:
       ASYNC_DATABASE_URL: postgresql+asyncpg://reo:reo@localhost:5432/reo
       REDIS_URL: redis://localhost:6379/0
       MODEL_PROVIDER: mock
+      PYTHONPATH: ${{ github.workspace }}/platform
     steps:
       - uses: actions/checkout@v4
 
@@ -45,19 +46,19 @@ jobs:
       - name: Install reo_common
         run: pip install -e platform/packages/reo_common
 
-      - name: Install api + test deps
+      - name: Install backend + test deps
         run: |
-          pip install -r platform/apps/api/requirements.txt
-          pip install -r platform/apps/optimizer-worker/requirements.txt
-          pip install -r platform/apps/agent-worker/requirements.txt
+          pip install -r platform/backend/requirements.txt
+          pip install -r platform/policy/requirements.txt
+          pip install -r platform/agent/requirements.txt
           pip install pytest ruff
 
       - name: Lint (ruff)
-        run: ruff check platform/packages platform/apps/api platform/apps/optimizer-worker platform/apps/agent-worker --exit-zero
+        run: ruff check platform/packages platform/backend platform/policy platform/agent platform/models platform/database platform/guardrails platform/evaluation platform/output --exit-zero
 
       - name: Run DB migrations
         run: |
-          cd platform/db
+          cd platform/database
           alembic upgrade head
 
       - name: Run tests
@@ -68,11 +69,23 @@ jobs:
     needs: lint-and-test
     strategy:
       matrix:
-        service: [api, optimizer-worker, agent-worker, ot-gateway-sim, edge-simulator, export-worker]
+        include:
+          - name: api
+            dockerfile: platform/backend/Dockerfile
+          - name: policy
+            dockerfile: platform/policy/Dockerfile
+          - name: agent
+            dockerfile: platform/agent/Dockerfile
+          - name: ot-gateway-sim
+            dockerfile: platform/guardrails/ot-gateway-sim/Dockerfile
+          - name: edge-simulator
+            dockerfile: platform/infrastructure/edge-simulator/Dockerfile
+          - name: export-worker
+            dockerfile: platform/output/export-worker/Dockerfile
     steps:
       - uses: actions/checkout@v4
-      - name: Build ${{ matrix.service }} image
-        run: docker build -f platform/apps/${{ matrix.service }}/Dockerfile -t reo-${{ matrix.service }}:ci .
+      - name: Build ${{ matrix.name }} image
+        run: docker build -f ${{ matrix.dockerfile }} -t reo-${{ matrix.name }}:ci .
 
   build-web:
     runs-on: ubuntu-latest
@@ -82,11 +95,11 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: platform/apps/web/package-lock.json
+          cache-dependency-path: platform/frontend/package-lock.json
       - run: npm ci
-        working-directory: platform/apps/web
+        working-directory: platform/frontend
       - run: npm run build
-        working-directory: platform/apps/web
+        working-directory: platform/frontend
 
   demo-script-smoke-test:
     runs-on: ubuntu-latest
@@ -95,7 +108,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Bring up the full stack
-        run: docker compose -f platform/infra/docker-compose.yml up -d --build
+        run: docker compose -f platform/infrastructure/docker-compose.yml up -d --build
         env:
           MODEL_PROVIDER: mock
 
@@ -108,7 +121,7 @@ jobs:
           echo "api never became healthy" && exit 1
 
       - name: Seed the reference tenant
-        run: docker compose -f platform/infra/docker-compose.yml exec -T api python /app/platform/db/seed.py
+        run: docker compose -f platform/infrastructure/docker-compose.yml exec -T api python /app/platform/database/seed.py
 
       - name: Wait one decision cycle
         run: sleep 15
@@ -125,8 +138,8 @@ jobs:
 
       - name: Dump logs on failure
         if: failure()
-        run: docker compose -f platform/infra/docker-compose.yml logs --tail=200
+        run: docker compose -f platform/infrastructure/docker-compose.yml logs --tail=200
 
       - name: Tear down
         if: always()
-        run: docker compose -f platform/infra/docker-compose.yml down -v
+        run: docker compose -f platform/infrastructure/docker-compose.yml down -v

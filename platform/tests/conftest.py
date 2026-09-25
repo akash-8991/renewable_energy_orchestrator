@@ -4,14 +4,19 @@ import uuid
 
 import pytest
 
+# platform root: makes the top-level shared packages (models, database,
+# guardrails, evaluation, policy, output) importable as e.g.
+# `from models.canonical import X` from any test, matching how every
+# service's own PYTHONPATH is set up in its Dockerfile.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "packages", "reo_common"))
 
 os.environ.setdefault("DATABASE_URL", "postgresql+psycopg2://reo:reo@127.0.0.1:5433/reo")
 os.environ.setdefault("ASYNC_DATABASE_URL", "postgresql+asyncpg://reo:reo@127.0.0.1:5433/reo")
 os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:6380/0")
 
-from reo_common.db import SessionLocal, break_glass_cross_tenant, reset_current_tenant, set_current_tenant  # noqa: E402
-from reo_common.models import Portfolio, Tenant  # noqa: E402
+from database.connection import SessionLocal, break_glass_cross_tenant, reset_current_tenant, set_current_tenant  # noqa: E402
+from models.canonical import Portfolio, Tenant  # noqa: E402
 
 
 @pytest.fixture()

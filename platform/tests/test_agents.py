@@ -8,7 +8,7 @@ prompt-building code runs without error for realistic-shaped evidence."""
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "agent-worker"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "agent"))
 
 from agents.asset_agent import assess as assess_asset  # noqa: E402
 from agents.base import AgentEnvelope  # noqa: E402

@@ -5,7 +5,7 @@ raised a DB-level error and aborted the whole ingestion transaction."""
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "api"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from app.ingestion.telemetry_consumer import _validate  # noqa: E402
 from reo_common.events import CloudEvent  # noqa: E402

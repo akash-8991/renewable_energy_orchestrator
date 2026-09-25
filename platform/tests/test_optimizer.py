@@ -3,13 +3,8 @@ synthetic portfolio. Regression-guards the forecast issue_time bug: a
 solar+wind+battery+consumer+grid system across 6 hourly steps must produce
 a genuinely balanced plan, not a trivial all-zero one."""
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "optimizer-worker"))
-
-from solver import BatteryInput, ConsumerInput, GenAssetInput, GridInput, ObjectiveWeights, solve  # noqa: E402
-from validator import validate_plan  # noqa: E402
+from policy.solver import BatteryInput, ConsumerInput, GenAssetInput, GridInput, ObjectiveWeights, solve  # noqa: E402
+from guardrails.validator import validate_plan  # noqa: E402
 
 N_STEPS = 6
 STEP_HOURS = 1.0

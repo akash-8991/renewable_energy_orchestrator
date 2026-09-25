@@ -1,7 +1,7 @@
 """TR-SSRF-01: Connector Studio must reject outbound targets pointing at
 loopback/link-local/cloud-metadata/private ranges by default."""
 
-from reo_common.ssrf import check_outbound_url
+from guardrails.ssrf import check_outbound_url
 
 
 def test_blocks_cloud_metadata_endpoint():

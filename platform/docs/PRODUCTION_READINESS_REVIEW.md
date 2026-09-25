@@ -42,7 +42,7 @@ Unchanged from the 2026-09-25 pass except D3, closed this session:
 | Axis | Status | Evidence |
 |---|---|---|
 | D1/D2 (structured/textual input) | Met | CSV/JSON/XLSX + REST/file/folder ingestion, `test_ingestion.py`. |
-| **D3 (heterogeneous multimodal input)** | **Met, this session** | `apps/api/app/ingestion/document_ingest.py` — PDF/image → vision extraction → `DocumentIntake` evidence → human-promoted `Constraint` that the optimizer genuinely derates solar/wind generation against (`document_constraints.py`, verified against live DB data: a 36,661kW forecast peak clipped to 12,000kW). |
+| **D3 (heterogeneous multimodal input)** | **Met, this session** | `backend/app/ingestion/document_ingest.py` — PDF/image → vision extraction → `DocumentIntake` evidence → human-promoted `Constraint` that the optimizer genuinely derates solar/wind generation against (`document_constraints.py`, verified against live DB data: a 36,661kW forecast peak clipped to 12,000kW). |
 | F1 (optimal action cluster) | Met | `test_actions_builder.py::test_a_full_coordinated_cycle_produces_one_action_per_family`. |
 | F2 (optimality criteria, adjustable) | Met | `GET/PUT /governance/objective-policy`, versioned. |
 | F3 (scenario simulation over time) | Met | `scenario_lab.py` re-solves all 6 named scenarios every cycle, persisted as `ScenarioRun`. |
@@ -55,7 +55,7 @@ is the first point in the build where the platform's *declared* solution-grid po
 
 ### UI responsiveness (mobile + desktop)
 
-Was **completely unaddressed** before this session — `apps/web/src/styles.css` had zero `@media`
+Was **completely unaddressed** before this session — `frontend/src/styles.css` had zero `@media`
 queries, and the 230px sidebar was permanently docked (over 60% of a 375px phone screen). Fixed:
 
 - `styles.css`: a single `@media (max-width: 860px)` block turns the sidebar into an off-canvas
@@ -86,7 +86,7 @@ Built:
 - `GET /observability/summary` / `/agent-calls` — real call-volume/latency/schema-validity
   metrics, verified live showing calls from both the ordinary decision-cycle traffic and the eval
   harness.
-- A small, honest evaluation harness (`apps/agent-worker/eval_harness.py`): 6 fixed cases across
+- A small, honest evaluation harness (`agent/eval_harness.py`): 6 fixed cases across
   3 agents, split into **structural** (schema-valid — true under mock too) and **behavioral**
   (requires real reasoning — e.g. "must raise a HIGH finding when 100% of telemetry is stale").
   Behavioral cases are reported **skipped**, not failed, when the active gateway is mock, so the

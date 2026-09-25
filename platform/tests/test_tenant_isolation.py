@@ -1,8 +1,8 @@
 """BR-07 / FR-MT-001: a query that forgets to filter by tenant must never
 leak another tenant's rows, and must fail closed with no tenant context."""
 
-from reo_common.db import reset_current_tenant, set_current_tenant
-from reo_common.models import Portfolio
+from database.connection import reset_current_tenant, set_current_tenant
+from models.canonical import Portfolio
 from sqlalchemy import select
 
 
@@ -32,7 +32,7 @@ def test_no_tenant_context_fails_closed(db_session, two_tenants):
 
 
 def test_break_glass_sees_across_tenants(db_session, two_tenants):
-    from reo_common.db import break_glass_cross_tenant
+    from database.connection import break_glass_cross_tenant
 
     t1, t2 = two_tenants
     with break_glass_cross_tenant():

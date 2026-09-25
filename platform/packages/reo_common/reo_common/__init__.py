@@ -1,7 +1,12 @@
-"""Shared kernel for the Renewable Energy Orchestrator platform.
+"""Cross-cutting shared kernel for the Renewable Energy Orchestrator platform:
+config, the vendor-neutral LLM model gateway, the Redis event bus, JWT/RBAC
+auth, the secrets vault, and digital-twin freshness helpers.
 
-Every service (api, optimizer-worker, agent-worker, ot-gateway-sim,
-edge-simulator, export-worker) depends on this package instead of
-duplicating the canonical data model, tenancy enforcement, auth,
-model-gateway or secrets-provider logic.
+The canonical data model, DB connection layer, safety/guardrail checks, the
+policy/dispatch engine and the evaluation harness each live in their own
+top-level package (platform/models, database, guardrails, policy,
+evaluation) rather than here — see platform/docs/ARCHITECTURE.md for the
+full repository layout and why it's split this way. Every service depends
+on this package (`pip install -e`) instead of duplicating auth/tenancy/
+model-gateway logic.
 """

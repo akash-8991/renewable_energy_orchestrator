@@ -10,7 +10,7 @@ The gateway:
   - retries once, then fails closed (`GatewayError`) rather than passing
     through free-form text,
   - is gated by a per-tenant Redis rate limit *before* any provider call is
-    made (see `rate_limiter`/`reo_common.rate_limit`) — a blocked call spends
+    made (see `rate_limiter`/`guardrails.rate_limit`) — a blocked call spends
     zero tokens, it's not a post-hoc throttle,
   - logs model/version/tokens/latency for every call (TRD §5 guardrail),
   - never receives raw secrets/credentials — callers redact/tokenise first.
@@ -33,7 +33,7 @@ from typing import Callable, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from .config import get_settings
-from .rate_limit import ModelCallRateLimiter
+from guardrails.rate_limit import ModelCallRateLimiter
 
 logger = logging.getLogger("reo.model_gateway")
 settings = get_settings()
@@ -90,7 +90,7 @@ class ModelGateway(ABC):
 
     #: Set by a caller that wants every call this gateway instance makes —
     #: success or fail-closed failure — persisted somewhere durable (e.g. the
-    #: `AgentCallLog` table via `reo_common.observability.persist_call_record`).
+    #: `AgentCallLog` table via `evaluation.observability.persist_call_record`).
     #: Left unset, calls are only ever reached via the Python logger, same as
     #: before this existed. Kept as a plain attribute rather than a
     #: constructor arg so `MockModelGateway()` stays trivial to construct in
@@ -98,7 +98,7 @@ class ModelGateway(ABC):
     on_call_record: "Callable[[ModelCallRecord], None] | None" = None
 
     #: Set by `get_model_gateway()` for every non-mock provider (a
-    #: `reo_common.rate_limit.ModelCallRateLimiter`) — checked at the top of
+    #: `guardrails.rate_limit.ModelCallRateLimiter`) — checked at the top of
     #: `complete_structured` before any provider call. Left unset for
     #: `MockModelGateway` (zero-cost, no Redis needed for tests) and left
     #: settable/overridable here for anything constructing a gateway

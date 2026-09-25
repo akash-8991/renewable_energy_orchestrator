@@ -1,11 +1,11 @@
 [project]
 name = "reo-common"
 version = "0.1.0"
-description = "Shared canonical models, schemas, auth, tenancy, model gateway and secrets provider for the Renewable Energy Orchestrator platform"
+description = "Cross-cutting shared kernel (config, model gateway, event bus, auth, secrets, digital-twin helpers) for the Renewable Energy Orchestrator platform. The canonical data model, DB connection layer, guardrails, policy engine and evaluation harness are separate top-level packages (platform/models, database, guardrails, policy, evaluation) — see platform/docs/ARCHITECTURE.md."
 requires-python = ">=3.11"
 dependencies = [
     "sqlalchemy>=2.0",
-    "greenlet>=3.0",  # required by sqlalchemy.ext.asyncio at import time (db.py imports it unconditionally); previously satisfied only transitively, which a fresh pip resolve isn't guaranteed to do
+    "greenlet>=3.0",  # required by sqlalchemy.ext.asyncio at import time (database/connection.py imports it unconditionally); previously satisfied only transitively, which a fresh pip resolve isn't guaranteed to do
     "asyncpg>=0.29",
     "psycopg2-binary>=2.9",
     "pydantic>=2.6",
@@ -15,6 +15,7 @@ dependencies = [
     "cryptography>=42.0",
     "redis>=5.0",
     "anthropic>=0.34",
+    "openai>=1.40",  # also used by OpenRouterModelGateway (OpenRouter mirrors the OpenAI wire format) — model_gateway.py's default provider
     "httpx>=0.27",
     "authlib>=1.3",
 ]

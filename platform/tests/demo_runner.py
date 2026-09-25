@@ -5,8 +5,8 @@ the literal demo script (run it live and narrate each step) and a coarse
 end-to-end regression test — it is the acceptance test the whole platform
 build was scoped against (see the plan's Context section).
 
-Prerequisites: `docker compose up -d --build` from platform/infra, with the
-seeded reference tenant (`python platform/db/seed.py`).
+Prerequisites: `docker compose up -d --build` from platform/infrastructure, with the
+seeded reference tenant (`python platform/database/seed.py`).
 
 Usage:
     python platform/tests/demo_runner.py [--base-url http://localhost:8000]

@@ -10,8 +10,8 @@ cd platform
 python3 tests/demo_runner.py --base-url http://localhost:8000
 ```
 
-Prerequisite: `docker compose up -d --build` (from `platform/infra`) and the reference tenant
-seeded (`docker compose exec api python /app/platform/db/seed.py`).
+Prerequisite: `docker compose up -d --build` (from `platform/infrastructure`) and the reference tenant
+seeded (`docker compose exec api python /app/platform/database/seed.py`).
 
 | # | Spec step | What happens | Where to look |
 |---|---|---|---|

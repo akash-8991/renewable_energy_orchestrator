@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, timezone
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "apps" / "optimizer-worker"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "policy"))
 
 from actions_builder import AssetRef, build_actions_for_step  # noqa: E402
 from solver import PlanStep  # noqa: E402

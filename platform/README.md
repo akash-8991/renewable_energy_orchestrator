@@ -6,15 +6,70 @@ interconnection and market participation on a 10-minute cycle, with an LLM agent
 prepares evidence and explanations while a deterministic optimizer and a segregated OT command
 gateway retain sole authority over anything that touches equipment.
 
-See `docs/ARCHITECTURE.md` for the build-to-spec traceability map and `docs/SIMPLIFICATIONS.md`
-for every deliberate scope decision made to build this without a real client engagement.
+See `docs/ARCHITECTURE.md` for the build-to-spec traceability map, `docs/SIMPLIFICATIONS.md` for
+every deliberate scope decision made to build this without a real client engagement, and
+`docs/PRODUCTION_READINESS_REVIEW.md` for a direct answer on deployment readiness.
+
+## Repository layout
+
+Each top-level directory is one concern, so a reader can go straight to the part of the system
+they care about instead of hunting through a single `apps/`:
+
+```
+platform/
+├── backend/          FastAPI HTTP API — ingestion, digital twin, decisions, governance,
+│                      connectors, exports, audit, admin, observability. The dashboard's
+│                      only entry point into the platform.
+├── frontend/          React + TypeScript + Vite dashboard (11 workspaces).
+├── agent/              The 9 specialist LLM agents (doc 07) + their orchestration loop
+│                      (worker.py). Agents only ever produce typed JSON evidence — never a
+│                      command — consumed by policy/ below.
+├── policy/            The actual decision-and-dispatch authority: the deterministic MILP
+│                      solver, the 24h scenario-comparison engine, the action builder that
+│                      turns a solved plan into governed Actions, and the autonomy/execution
+│                      engine (policy/engine/) that decides Observe/Recommend/Approval/
+│                      Autonomous disposition and forwards approved commands to guardrails/.
+├── guardrails/         Independent safety checks, structurally separate from the things they
+│                      check: the feasibility validator (re-checks the solver's own plan from
+│                      first principles), SSRF egress hardening, the model-call rate limiter,
+│                      PII redaction, and ot-gateway-sim/ (independent re-validation
+│                      immediately pre-dispatch + simulated SCADA acknowledgement).
+├── evaluation/         Agent observability persistence + the fixed-scenario evaluation
+│                      harness — the concrete thing behind the model_admin role.
+├── models/             The canonical SQLAlchemy data model (Tenant, Asset, Decision, Action,
+│                      DocumentIntake, AgentCallLog, ...) — one schema, shared by every service.
+├── database/           DB connection/tenant-isolation layer, Alembic migrations, seed script.
+├── output/             Reporting/export: the hash-chained audit log and the Excel
+│                      evidence-pack export worker.
+├── infrastructure/     docker-compose.yml, Dockerfiles' build context, Terraform (AWS
+│                      reference deployment, written but not applied), and edge-simulator/
+│                      (synthetic telemetry standing in for real smart-meter/SCADA feeds).
+├── packages/
+│   └── reo_common/     Cross-cutting shared kernel every service pip-installs: config, the
+│                      vendor-neutral LLM model gateway, the Redis event bus, JWT/RBAC auth,
+│                      the secrets vault, digital-twin freshness helpers.
+├── docs/                Architecture traceability, deliberate simplifications, production
+│                      readiness review, demo script.
+└── tests/               pytest suite + demo_runner.py (drives the live stack through the
+                        doc 08 §4 demo script end-to-end).
+```
+
+Why split this way instead of one folder per deployable service: several of the concerns above
+(`models`, `guardrails`, `policy/engine`, `evaluation`) are imported by *multiple* services (e.g.
+`backend` and `agent` both read `models.canonical`; `policy`'s cycle imports
+`guardrails.validator`) — grouping by concern rather than by container makes it obvious which
+piece of logic to change for a given change, independent of which service happens to run it.
+Each Python service's own `Dockerfile` copies exactly the shared top-level packages it needs and
+sets `PYTHONPATH=/app/platform:/app/platform/<service>` so both styles resolve: dotted imports
+like `from models.canonical import Asset` for the shared packages, and flat imports like
+`from solver import ...` for files within that service's own directory.
 
 ## Quickstart (Docker Compose)
 
 Requires Docker Desktop.
 
 ```bash
-cd platform/infra
+cd platform/infrastructure
 docker compose up -d --build
 ```
 
@@ -25,7 +80,7 @@ Seed the reference demo tenant (5 solar farms, 3 wind farms, 2 BESS, 6 industria
 grid interconnection, and one user per role):
 
 ```bash
-docker compose run --rm api python /app/platform/db/seed.py
+docker compose run --rm api python /app/platform/database/seed.py
 ```
 
 Then:
@@ -35,13 +90,14 @@ Then:
 - MinIO console: http://localhost:9001 (`reo-minio` / `reo-minio-secret`)
 
 Demo login: tenant slug `demo-utility`, any seeded email (e.g. `tenant.admin@demo-utility.test`),
-password `Password123!` (local/demo only — see `db/seed.py`).
+password `Password123!` (local/demo only — see `database/seed.py`).
 
-The dashboard has 10 workspaces (sidebar): Portfolio Operations, Decision Centre, Approval Inbox,
-Live Signal Monitor, Connector Studio, Policy Studio, Simulation Lab, Audit & Exports, Tenant
-Administration, Platform Operations — each role sees a different subset per its RBAC permissions
-(e.g. only `portfolio_manager` can drive Simulation Lab; only `tenant_admin`/`platform_admin` can
-provision users/tenants).
+The dashboard has 11 workspaces (sidebar): Portfolio Operations, Decision Centre, Approval Inbox,
+Live Signal Monitor, Action Tickets, Connector Studio, Document Intake, Policy Studio, Simulation
+Lab, Agent Observability, Audit & Exports, Tenant Administration, Platform Operations — each role
+sees a different subset per its RBAC permissions (e.g. only `portfolio_manager` can drive
+Simulation Lab; only `tenant_admin`/`platform_admin` can provision users/tenants; only
+`model_admin` can trigger an evaluation run).
 
 ## Run the demo script
 
@@ -65,14 +121,28 @@ internally — only host-side tooling (a local `alembic`, `psql`, `redis-cli`) n
 
 ## Model provider
 
-Defaults to a deterministic mock model gateway (zero cost, zero API key, schema-valid canned
-responses) so the whole pipeline runs out of the box. For real agent reasoning, set in
-`platform/.env` (copy from `.env.example`) or as compose environment variables:
+Defaults to **OpenRouter** (https://openrouter.ai — one OpenAI-compatible endpoint in front of
+many providers/models), with automatic fallback to a deterministic mock gateway (zero cost, zero
+API key, schema-valid canned responses) whenever no key is configured, so the whole pipeline still
+runs out of the box with nothing set up.
+
+For real agent reasoning, copy `platform/.env.example` to `platform/infrastructure/.env` (used by
+`docker compose`, which loads `.env` from the compose file's own directory) and set:
 
 ```bash
-MODEL_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
+MODEL_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-...        # https://openrouter.ai/settings/keys
+OPENROUTER_MODEL=openai/gpt-4o-mini    # any OpenRouter model slug
 ```
+
+`platform/infrastructure/.env` is gitignored — never commit a real key. Anthropic and OpenAI
+direct (non-OpenRouter) are also supported: set `MODEL_PROVIDER=anthropic` or `openai` and the
+matching `*_API_KEY`/`*_MODEL` instead.
+
+**Rate limiting:** every model-gateway call (every agent, the document-intake vision path) is
+gated by a per-tenant Redis-backed cap enforced *before* the provider is called, so a blocked call
+spends zero tokens — not a post-hoc throttle. Tune with `MODEL_RATE_LIMIT_PER_MINUTE` /
+`MODEL_RATE_LIMIT_PER_DAY` (defaults: 20/min, 2000/day). Ignored for the mock gateway.
 
 ## Running tests
 
@@ -80,21 +150,21 @@ ANTHROPIC_API_KEY=sk-ant-...
 cd platform
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e packages/reo_common
-pip install -r apps/api/requirements.txt -r apps/optimizer-worker/requirements.txt -r apps/agent-worker/requirements.txt
+pip install -r backend/requirements.txt -r policy/requirements.txt -r agent/requirements.txt
 pip install pytest
 DATABASE_URL=postgresql+psycopg2://reo:reo@127.0.0.1:5433/reo pytest tests -v
 ```
 
 ## AWS deployment (Terraform, not applied)
 
-`platform/infra/terraform` provisions a simplified single-account AWS reference deployment (VPC
-with an isolated OT-DMZ tier, ECS Fargate, RDS PostgreSQL, ElastiCache Redis, S3, Secrets
-Manager/KMS, ALB). It validates cleanly (`terraform validate`) but has **not** been applied — no
-AWS resources exist from this build. See `docs/SIMPLIFICATIONS.md` for what differs from the
-spec's full reference architecture and why.
+`platform/infrastructure/terraform` provisions a simplified single-account AWS reference
+deployment (VPC with an isolated OT-DMZ tier, ECS Fargate, RDS PostgreSQL, ElastiCache Redis, S3,
+Secrets Manager/KMS, ALB). It validates cleanly (`terraform validate`) but has **not** been
+applied — no AWS resources exist from this build. See `docs/SIMPLIFICATIONS.md` for what differs
+from the spec's full reference architecture and why.
 
 ```bash
-cd platform/infra/terraform
+cd platform/infrastructure/terraform
 terraform init
 terraform plan   # requires AWS credentials; review before ever running apply
 ```

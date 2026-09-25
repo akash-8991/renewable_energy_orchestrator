@@ -9,7 +9,7 @@ import bcrypt
 from jose import JWTError, jwt
 
 from .config import get_settings
-from .models import Role
+from models.canonical import Role
 
 settings = get_settings()
 
