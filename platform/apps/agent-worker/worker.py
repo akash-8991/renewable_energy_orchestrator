@@ -24,10 +24,12 @@ from agents.market_agent import assess as assess_market
 from agents.optimisation_reviewer import assess as assess_optimisation
 from agents.risk_critic import assess as assess_risk
 from context import build_evidence_bundle
+from eval_harness import run_eval_suite
 from reo_common.db import SessionLocal, break_glass_cross_tenant
-from reo_common.events import CloudEvent, EventBus, STREAM_DASHBOARD_FANOUT, STREAM_DECISION_READY
+from reo_common.events import CloudEvent, EventBus, STREAM_DASHBOARD_FANOUT, STREAM_DECISION_READY, STREAM_EVAL_REQUEST
 from reo_common.model_gateway import get_model_gateway
-from reo_common.models import Decision
+from reo_common.models import AgentEvalRun, Decision
+from reo_common.observability import persist_call_record
 from sqlalchemy import select
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s agent-worker %(message)s")
@@ -53,6 +55,7 @@ def _envelope_to_dict(name: str, result) -> dict:
 def run_agents_for_decision(decision_id: str) -> None:
     gateway = get_model_gateway()
     db = SessionLocal()
+    gateway.on_call_record = lambda record: persist_call_record(db, record)
     try:
         with break_glass_cross_tenant():
             decision = db.execute(select(Decision).where(Decision.id == decision_id)).scalar_one_or_none()
@@ -115,13 +118,35 @@ def run_agents_for_decision(decision_id: str) -> None:
         db.close()
 
 
+def run_eval_request(tenant_id: str | None, triggered_by: str | None) -> None:
+    gateway = get_model_gateway()
+    db = SessionLocal()
+    gateway.on_call_record = lambda record: persist_call_record(db, record)
+    try:
+        with break_glass_cross_tenant():
+            summary = run_eval_suite(gateway, tenant_id=tenant_id) if tenant_id else run_eval_suite(gateway)
+            db.add(AgentEvalRun(
+                tenant_id=tenant_id, triggered_by=triggered_by, model_provider=summary["model_provider"],
+                total_cases=summary["total_cases"], passed_cases=summary["passed_cases"], results=summary["results"],
+            ))
+            db.commit()
+            log.info("eval suite run complete: %d/%d cases passed (provider=%s)", summary["passed_cases"], summary["total_cases"], summary["model_provider"])
+    except Exception:
+        db.rollback()
+        log.exception("eval suite run failed")
+        raise
+    finally:
+        db.close()
+
+
 def main() -> None:
     gateway = get_model_gateway()
     log.info("agent-worker started, model gateway provider=%s model=%s", gateway.provider_name, getattr(gateway, "model_name", "n/a"))
     bus = EventBus()
     bus.ensure_group(STREAM_DECISION_READY, "agent-worker")
+    bus.ensure_group(STREAM_EVAL_REQUEST, "agent-worker")
     while True:
-        events = bus.consume(STREAM_DECISION_READY, "agent-worker", "worker-1", block_ms=5000)
+        events = bus.consume(STREAM_DECISION_READY, "agent-worker", "worker-1", block_ms=3000)
         for entry_id, event in events:
             decision_id = event.data.get("decision_id")
             if decision_id:
@@ -130,7 +155,16 @@ def main() -> None:
                 except Exception:
                     log.exception("failed to process decision %s, will not retry automatically", decision_id)
             bus.ack(STREAM_DECISION_READY, "agent-worker", entry_id)
-        if not events:
+
+        eval_events = bus.consume(STREAM_EVAL_REQUEST, "agent-worker", "worker-1", block_ms=500)
+        for entry_id, event in eval_events:
+            try:
+                run_eval_request(event.data.get("tenant_id"), event.data.get("triggered_by"))
+            except Exception:
+                log.exception("failed to process eval request")
+            bus.ack(STREAM_EVAL_REQUEST, "agent-worker", entry_id)
+
+        if not events and not eval_events:
             time.sleep(1)
 
 

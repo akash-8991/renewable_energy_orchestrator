@@ -522,6 +522,7 @@ class Connector(Base):
     id: Mapped[str] = uuid_pk()
     tenant_id: Mapped[str] = tenant_fk()
     name: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(30), default="generic")  # generic|market_data|database|scada_bridge — categorises what the endpoint is for; see ARCHITECTURE.md for what's actually wired to live data vs registration-only
     endpoint_url: Mapped[str] = mapped_column(String(500))
     method: Mapped[str] = mapped_column(String(10), default="POST")
     headers: Mapped[dict] = mapped_column(JSONB, default=dict)
@@ -643,6 +644,71 @@ class DocumentIntake(Base):
 
 
 register_tenant_scoped(DocumentIntake)
+
+
+# ---------------------------------------------------------------------------
+# Agent observability & evaluation (MODEL_ADMIN role's own workspace — the
+# `manage:model_registry`/`manage:model_eval`/`deploy:model` permissions
+# existed with nothing behind them until this).
+# ---------------------------------------------------------------------------
+
+
+class AgentCallLog(Base):
+    """One row per `ModelGateway.complete_structured(...)` call, success or
+    fail-closed failure — every specialist agent and the document-intake
+    vision path already produce a `ModelCallRecord` in-memory
+    (`model_gateway.py`); this is that record, persisted, instead of only
+    ever reaching a Python logger. This is what an "agent observability"
+    dashboard is actually built from: real call volume, latency, schema
+    validity and retry rate, not a mocked-up chart.
+    """
+
+    __tablename__ = "agent_call_logs"
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("tenants.id"), nullable=True, index=True)
+    agent: Mapped[str] = mapped_column(String(60), index=True)
+    correlation_id: Mapped[str] = mapped_column(String(80), index=True)
+    provider: Mapped[str] = mapped_column(String(30))
+    model: Mapped[str] = mapped_column(String(80))
+    latency_ms: Mapped[float] = mapped_column(Float)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    schema_valid: Mapped[bool] = mapped_column(Boolean)
+    retried: Mapped[bool] = mapped_column(Boolean, default=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_agent_call_logs_tenant_agent_created", "tenant_id", "agent", "created_at"),)
+
+
+# NOTE: like AuditEvent, intentionally not tenant-scope-filtered at the ORM
+# level — a platform-wide model-quality view (MODEL_ADMIN) needs to see
+# every tenant's call health, not just one. Tenant filtering for non-
+# platform roles is applied at the API layer.
+
+
+class AgentEvalRun(Base):
+    """A run of the fixed-scenario evaluation harness
+    (`apps/agent-worker/eval_harness.py`) against a small set of labelled
+    fixtures with known-correct behaviour (e.g. "must flag HIGH severity
+    when battery SoC is critically low", "must return INSUFFICIENT_EVIDENCE
+    when telemetry is missing") — a real, if modest, automated regression
+    check on agent behaviour, distinct from live call-health monitoring.
+    """
+
+    __tablename__ = "agent_eval_runs"
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("tenants.id"), nullable=True, index=True)
+    triggered_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    model_provider: Mapped[str] = mapped_column(String(30))
+    total_cases: Mapped[int] = mapped_column(Integer, default=0)
+    passed_cases: Mapped[int] = mapped_column(Integer, default=0)
+    results: Mapped[list] = mapped_column(JSONB, default=list)  # [{case, agent, passed, detail}, ...]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_agent_eval_runs_tenant_created", "tenant_id", "created_at"),)
 
 
 # ---------------------------------------------------------------------------

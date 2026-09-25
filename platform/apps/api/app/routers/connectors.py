@@ -27,6 +27,7 @@ router = APIRouter(prefix="/connectors", tags=["connectors"])
 
 class ConnectorCreateRequest(BaseModel):
     name: str
+    kind: Literal["generic", "market_data", "database", "scada_bridge"] = "generic"
     endpoint_url: str
     method: str = "POST"
     headers: dict = {}
@@ -41,6 +42,7 @@ class ConnectorCreateRequest(BaseModel):
 class ConnectorSummary(BaseModel):
     id: str
     name: str
+    kind: str
     endpoint_url: str
     method: str
     status: str
@@ -61,7 +63,7 @@ def _to_summary(db: Session, c: Connector) -> ConnectorSummary:
             auth_type = cred.auth_type
             masked = get_secrets_provider().masked_summary(cred.encrypted_payload)
     return ConnectorSummary(
-        id=c.id, name=c.name, endpoint_url=c.endpoint_url, method=c.method, status=c.status,
+        id=c.id, name=c.name, kind=c.kind, endpoint_url=c.endpoint_url, method=c.method, status=c.status,
         auth_type=auth_type, credential_masked=masked, created_by=c.created_by, activated_by=c.activated_by,
         last_test_result=c.last_test_result, created_at=c.created_at.isoformat(),
     )
@@ -92,7 +94,7 @@ def create_connector(
         credential_ref_id = cred.id
 
     connector = Connector(
-        tenant_id=ctx.tenant_id, name=body.name, endpoint_url=body.endpoint_url, method=body.method,
+        tenant_id=ctx.tenant_id, name=body.name, kind=body.kind, endpoint_url=body.endpoint_url, method=body.method,
         headers=body.headers, credential_ref_id=credential_ref_id, schema_mapping=body.schema_mapping,
         timeout_seconds=body.timeout_seconds, rate_limit_per_min=body.rate_limit_per_min,
         approval_policy={"requires_maker_checker": body.requires_maker_checker},

@@ -89,6 +89,40 @@ def build_workbook(db, tenant_id: str, filters: dict) -> tuple[bytes, int]:
         for d in decisions
     ])
 
+    # one row per governed Action ("ticket") — the per-decision plan JSON
+    # already carried this, but nowhere summarised every action across every
+    # decision in one place; latest Signal/Approval per action gives each
+    # row a resolved disposition instead of just the bare Action fields.
+    latest_signal_by_action: dict[str, Signal] = {}
+    for s in sorted(signals, key=lambda s: s.created_at, reverse=True):
+        latest_signal_by_action.setdefault(s.action_id, s)
+    latest_approval_by_action: dict[str, Approval] = {}
+    for ap in sorted(approvals, key=lambda a: a.created_at, reverse=True):
+        if ap.action_id:
+            latest_approval_by_action.setdefault(ap.action_id, ap)
+
+    def _ticket_status(action_id: str) -> str:
+        sig = latest_signal_by_action.get(action_id)
+        appr = latest_approval_by_action.get(action_id)
+        if appr is not None and appr.outcome in ("rejected", "expired"):
+            return appr.outcome
+        if sig is not None:
+            if sig.state in ("acknowledged", "reconciled"):
+                return "dispatched"
+            if sig.state in ("rejected", "timed_out", "cancelled", "rolled_back"):
+                return "failed"
+            if sig.state in ("queued", "sent", "approved"):
+                return "dispatching"
+        if appr is not None:
+            return appr.outcome
+        return "pending"
+
+    _write_sheet(wb, "Actions", ["Action ID", "Decision ID", "Asset ID", "Action Type", "Quantity", "Unit", "Risk Level", "Requires Approval", "Ticket Status", "Reason", "Start Time", "End Time"], [
+        [a.id, a.decision_id, a.asset_id or "", a.action_type, a.quantity, a.unit, a.risk_level, a.requires_approval,
+         _ticket_status(a.id), a.reason or "", a.start_time.isoformat(), a.end_time.isoformat()]
+        for a in actions
+    ])
+
     _write_sheet(wb, "Signals", ["Signal ID", "Correlation ID", "Asset ID", "Command Type", "Setpoint", "Unit", "State", "Idempotency Key", "Created At"], [
         [s.id, s.correlation_id, s.target_asset_id, s.command_type, s.setpoint_value, s.unit, s.state, s.idempotency_key, s.created_at.isoformat()]
         for s in signals
@@ -115,6 +149,7 @@ def build_workbook(db, tenant_id: str, filters: dict) -> tuple[bytes, int]:
         ["Generated At (UTC)", datetime.now(timezone.utc).isoformat()],
         ["Filters", str(filters)],
         ["Decision Rows", len(decisions)],
+        ["Action Rows", len(actions)],
         ["Signal Rows", len(signals)],
         ["Approval Rows", len(approvals)],
         ["Acknowledgement Rows", len(commands)],
@@ -124,7 +159,7 @@ def build_workbook(db, tenant_id: str, filters: dict) -> tuple[bytes, int]:
     buf = io.BytesIO()
     wb.save(buf)
     content = buf.getvalue()
-    row_count = len(decisions) + len(signals) + len(approvals) + len(commands)
+    row_count = len(decisions) + len(actions) + len(signals) + len(approvals) + len(commands)
     return content, row_count
 
 

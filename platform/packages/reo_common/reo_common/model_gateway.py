@@ -22,7 +22,7 @@ import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import TypeVar
+from typing import Callable, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -60,10 +60,26 @@ class ModelCallRecord(BaseModel):
     output_tokens: int | None = None
     schema_valid: bool
     retried: bool = False
+    error: str | None = None
+
+
+class RawCallResult(BaseModel):
+    raw_json: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class ModelGateway(ABC):
     provider_name: str = "abstract"
+
+    #: Set by a caller that wants every call this gateway instance makes —
+    #: success or fail-closed failure — persisted somewhere durable (e.g. the
+    #: `AgentCallLog` table via `reo_common.observability.persist_call_record`).
+    #: Left unset, calls are only ever reached via the Python logger, same as
+    #: before this existed. Kept as a plain attribute rather than a
+    #: constructor arg so `MockModelGateway()` stays trivial to construct in
+    #: the many tests that don't care about persistence.
+    on_call_record: "Callable[[ModelCallRecord], None] | None" = None
 
     @abstractmethod
     def _raw_call(
@@ -74,11 +90,12 @@ class ModelGateway(ABC):
         json_schema: dict,
         schema_name: str,
         images: list[tuple[bytes, str]] | None = None,
-    ) -> str:
-        """Return raw JSON text from the underlying provider. `images`, when
-        given, is a list of (raw_bytes, media_type) pairs — e.g. rendered
-        pages of a scanned document — sent alongside `user_content` for
-        providers with vision support (D3: heterogeneous multimodal input)."""
+    ) -> RawCallResult:
+        """Return the raw JSON text from the underlying provider, plus token
+        usage when the provider reports it. `images`, when given, is a list
+        of (raw_bytes, media_type) pairs — e.g. rendered pages of a scanned
+        document — sent alongside `user_content` for providers with vision
+        support (D3: heterogeneous multimodal input)."""
 
     def complete_structured(
         self,
@@ -104,17 +121,17 @@ class ModelGateway(ABC):
         start = time.perf_counter()
         retried = False
         last_error: Exception | None = None
-        raw = ""
+        last_result: RawCallResult | None = None
         for attempt in range(2):
             try:
-                raw = self._raw_call(
+                last_result = self._raw_call(
                     system_prompt=full_system_prompt,
                     user_content=user_content,
                     json_schema=schema,
                     schema_name=schema_name,
                     images=images,
                 )
-                parsed = response_model.model_validate_json(raw)
+                parsed = response_model.model_validate_json(last_result.raw_json)
                 latency_ms = (time.perf_counter() - start) * 1000
                 record = ModelCallRecord(
                     agent=agent,
@@ -123,10 +140,14 @@ class ModelGateway(ABC):
                     provider=self.provider_name,
                     model=getattr(self, "model_name", "unknown"),
                     latency_ms=latency_ms,
+                    input_tokens=last_result.input_tokens,
+                    output_tokens=last_result.output_tokens,
                     schema_valid=True,
                     retried=retried,
                 )
                 logger.info("model_call", extra={"record": record.model_dump()})
+                if self.on_call_record:
+                    self.on_call_record(record)
                 return parsed, record
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
@@ -137,9 +158,15 @@ class ModelGateway(ABC):
         record = ModelCallRecord(
             agent=agent, tenant_id=tenant_id, correlation_id=correlation_id,
             provider=self.provider_name, model=getattr(self, "model_name", "unknown"),
-            latency_ms=latency_ms, schema_valid=False, retried=True,
+            latency_ms=latency_ms,
+            input_tokens=last_result.input_tokens if last_result else None,
+            output_tokens=last_result.output_tokens if last_result else None,
+            schema_valid=False, retried=True, error=str(last_error)[:2000],
         )
-        logger.warning("model_call_failed_closed", extra={"record": record.model_dump(), "raw": raw[:500]})
+        raw_for_log = last_result.raw_json if last_result else ""
+        logger.warning("model_call_failed_closed", extra={"record": record.model_dump(), "raw": raw_for_log[:500]})
+        if self.on_call_record:
+            self.on_call_record(record)
         raise GatewayError(f"{agent}: schema-invalid response after retry: {last_error}")
 
 
@@ -155,7 +182,7 @@ class AnthropicModelGateway(ModelGateway):
     def _raw_call(
         self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str,
         images: list[tuple[bytes, str]] | None = None,
-    ) -> str:
+    ) -> RawCallResult:
         import base64
 
         tool = {
@@ -178,9 +205,14 @@ class AnthropicModelGateway(ModelGateway):
             tool_choice={"type": "tool", "name": tool["name"]},
             messages=[{"role": "user", "content": content}],
         )
+        usage = getattr(resp, "usage", None)
         for block in resp.content:
             if block.type == "tool_use":
-                return json.dumps(block.input)
+                return RawCallResult(
+                    raw_json=json.dumps(block.input),
+                    input_tokens=getattr(usage, "input_tokens", None),
+                    output_tokens=getattr(usage, "output_tokens", None),
+                )
         raise ValueError("no tool_use block in Anthropic response")
 
 
@@ -196,7 +228,7 @@ class OpenAIModelGateway(ModelGateway):
     def _raw_call(
         self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str,
         images: list[tuple[bytes, str]] | None = None,
-    ) -> str:
+    ) -> RawCallResult:
         import base64
 
         user_content_parts: list[dict] = [{"type": "text", "text": user_content}]
@@ -214,7 +246,12 @@ class OpenAIModelGateway(ModelGateway):
                 "json_schema": {"name": schema_name, "schema": json_schema, "strict": True},
             },
         )
-        return resp.choices[0].message.content or "{}"
+        usage = getattr(resp, "usage", None)
+        return RawCallResult(
+            raw_json=resp.choices[0].message.content or "{}",
+            input_tokens=getattr(usage, "prompt_tokens", None),
+            output_tokens=getattr(usage, "completion_tokens", None),
+        )
 
 
 class MockModelGateway(ModelGateway):
@@ -227,8 +264,15 @@ class MockModelGateway(ModelGateway):
     def _raw_call(
         self, *, system_prompt: str, user_content: str, json_schema: dict, schema_name: str,
         images: list[tuple[bytes, str]] | None = None,
-    ) -> str:
-        return json.dumps(_mock_instance_for_schema(json_schema))
+    ) -> RawCallResult:
+        # rough deterministic stand-in for token counts, purely so the
+        # observability dashboard has non-null numbers to render in mock/demo
+        # mode — never meant to approximate real tokenization.
+        return RawCallResult(
+            raw_json=json.dumps(_mock_instance_for_schema(json_schema)),
+            input_tokens=max(1, len(system_prompt) // 4 + len(user_content) // 4),
+            output_tokens=max(1, len(json.dumps(json_schema)) // 8),
+        )
 
 
 def _mock_instance_for_schema(schema: dict) -> dict:

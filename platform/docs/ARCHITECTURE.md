@@ -2,7 +2,9 @@
 
 This maps what's implemented to where it's specified in the 8 client documents
 (`renewable_energy_orchestrator/01..08_*.docx`). See `SIMPLIFICATIONS.md` for every deliberate
-scope reduction, and the root plan for the full module-by-module build order.
+scope reduction, and the root plan for the full module-by-module build order. See
+`PRODUCTION_READINESS_REVIEW.md` for a direct answer on deployment readiness and a consolidated
+punch list — read that first if the question is "can this go live."
 
 ## Non-negotiable spine (present in every spec doc — must survive any future change)
 
@@ -37,9 +39,9 @@ engine and (for anything but the lowest-risk bounded actions) a human approval.
 
 | Service | Primary spec sections | Canonical entities it owns |
 |---|---|---|
-| `apps/api` | FRD (all modules), TRD §11 (platform services), doc 05 §10 (platform architecture extension) | Tenant, User, Portfolio, Site, Asset, Battery, Decision, Action, Approval, Connector, CredentialRef, ExportJob, AuditEvent |
+| `apps/api` | FRD (all modules), TRD §11 (platform services), doc 05 §10 (platform architecture extension) | Tenant, User, Portfolio, Site, Asset, Battery, Decision, Action, Approval, Connector, CredentialRef, ExportJob, AuditEvent, DocumentIntake, AgentCallLog, AgentEvalRun |
 | `apps/optimizer-worker` | TRD §4 (optimisation requirements), doc 05 ADR-001, hackathon problem 4 F1/F3 | reads Constraint/ObjectivePolicy/Forecast, writes Decision.plan, Action, ScenarioRun |
-| `apps/agent-worker` | doc 07 (Prompt and Agent Design, in full) | writes Decision.reasoning, Decision.risk_flags |
+| `apps/agent-worker` | doc 07 (Prompt and Agent Design, in full) | writes Decision.reasoning, Decision.risk_flags, AgentCallLog, AgentEvalRun (also runs `eval_harness.py` on `reo.eval.request`) |
 | `apps/ot-gateway-sim` | doc 05 §7 (Safety architecture), TR-OT-01 | writes Command, updates Signal.state |
 | `apps/edge-simulator` | BRD reference portfolio (5 solar/3 wind/2 BESS), TRD §7 (industrial protocols) | writes Telemetry |
 | `apps/export-worker` | FR-EXP-001/002, TR-EXP-01 | writes ExportJob, reads reporting projections |
@@ -75,10 +77,12 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Decision Centre | `GET /decisions`, `GET /decisions/{id}`, `GET /decisions/{id}/scenario-runs` |
 | Approval Inbox | `GET /governance/approvals`, `POST /governance/approvals/{id}/decide` |
 | Live Signal Monitor | `GET /signals` |
-| Connector Studio | `GET/POST /connectors`, `POST /connectors/{id}/{test,activate,disable}` |
+| Action Tickets | `GET /actions` |
+| Connector Studio | `GET/POST /connectors` (incl. `kind`: generic/market_data/database/scada_bridge), `POST /connectors/{id}/{test,activate,disable}` |
 | Policy Studio | `GET/PUT /governance/autonomy-policy`, `GET/PUT /governance/objective-policy`, `POST /governance/e-stop` |
 | Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
-| Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` |
+| Agent Observability | `GET /observability/summary`, `GET /observability/agent-calls`, `GET/POST /observability/eval-runs[/run]` |
+| Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` (Excel export includes an "Actions" sheet) |
 | Tenant Administration | `GET/POST /admin/users`, `GET/POST /admin/tenants` |
 | Platform Operations | rollups over the above; no dedicated endpoint |
 | Document Intake | `POST /ingestion/documents`, `GET /ingestion/documents`, `POST /ingestion/documents/{id}/apply-constraint` |

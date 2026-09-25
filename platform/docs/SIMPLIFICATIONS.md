@@ -1,5 +1,8 @@
 # Simplifications — build vs the 8 spec documents
 
+See `PRODUCTION_READINESS_REVIEW.md` for the consolidated, prioritised version of everything below
+plus a direct production-readiness verdict — this file is the detailed reference it summarises.
+
 The 8 spec documents (BRD/PRD/FRD/TRD/Architecture/Infrastructure/Prompt-Agent-Design/
 Implementation-Validation-Commercialisation) describe a multi-year enterprise engagement. This
 build implements the full *functional* breadth of that spec with real, working logic in every
@@ -51,6 +54,32 @@ documented limits rather than silent gaps:
   other agent. Verified via the mock gateway (schema-valid extraction, correct plumbing end to
   end: render → extract → persist → audit → apply → optimizer derate, confirmed against live DB
   data) and via unit tests; not verified against a real photographed document with real API calls.
+
+## Known tracked item: Connector Studio is a registration surface, not a live data path
+
+`GET/POST /connectors` (SSRF-hardened, vaulted credentials, maker-checker) now categorises a
+connector's `kind` (`generic`/`market_data`/`database`/`scada_bridge`), but registering one still
+only does what it always did: store config, run a reachability test, and gate activation. Grepping
+the codebase confirms nothing outside `routers/connectors.py` reads a `Connector` row — `forecast.py`'s
+price series is a synthetic diurnal model, and `ot-gateway-sim` has no reference to `Connector` at
+all. Wiring a `market_data` connector into `forecast.py`'s price forecast, a `database` connector
+into a real query path, or a `scada_bridge` connector into `ot-gateway-sim`'s dispatch path are each
+a distinct, non-trivial feature (scheduled polling/caching, protocol-specific validation, and for
+SCADA a full safety review) — deliberately not attempted as a same-session bolt-on. See
+`PRODUCTION_READINESS_REVIEW.md` §4 item 2/8.
+
+## Known tracked item: agent observability/eval is real but demo-scale
+
+`AgentCallLog` persists every actual model-gateway call (real token usage, latency, schema-validity,
+retries) — this is genuine telemetry, not synthetic. The evaluation harness
+(`apps/agent-worker/eval_harness.py`) is 6 fixed cases across 3 agents, correctly distinguishing
+schema-structural checks (pass under mock) from reasoning-behavioral checks (skipped under mock,
+since mock cannot reason about a scenario) — but it is a demonstration of the *pattern*, not a
+comprehensive eval program. A real one needs a much larger labelled corpus, ideally drawn from real
+incident/decision history once the platform has some, plus statistical treatment over repeated runs
+and human/rubric scoring for qualitative findings. There is also no timeout/circuit-breaker around
+`ModelGateway.complete_structured` — a slow or unreachable Anthropic API currently just makes a
+decision cycle run long rather than degrading gracefully.
 
 ## Known tracked item: frontend dependency advisories
 

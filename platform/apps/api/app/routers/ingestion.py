@@ -10,6 +10,7 @@ from reo_common.audit import append_audit_event
 from reo_common.events import EventBus
 from reo_common.model_gateway import GatewayError, get_model_gateway
 from reo_common.models import Asset, Constraint, DocumentIntake
+from reo_common.observability import persist_call_record
 from reo_common.security import AuthContext
 from sqlalchemy import select
 from sqlalchemy.exc import DataError
@@ -126,11 +127,14 @@ async def upload_document(
         log.exception("failed to render document %s", filename)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "could not render document pages — file may be corrupt")
 
+    gateway = get_model_gateway()
+    gateway.on_call_record = lambda record: persist_call_record(db, record)
     try:
         extraction = extract_document(
-            get_model_gateway(), tenant_id=ctx.tenant_id, correlation_id=f"doc:{filename}", filename=filename, pages=pages,
+            gateway, tenant_id=ctx.tenant_id, correlation_id=f"doc:{filename}", filename=filename, pages=pages,
         )
     except GatewayError as exc:
+        db.commit()  # keep the failed-call observability row even though the upload itself is rejected
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"document could not be reliably extracted: {exc}") from exc
 
     row = DocumentIntake(

@@ -5,7 +5,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .ingestion import folder_watcher, telemetry_consumer
-from .routers import admin, audit, auth, connectors, decisions, exports, governance, health, ingestion, signals, simulation, twin
+from .routers import (
+    actions,
+    admin,
+    audit,
+    auth,
+    connectors,
+    decisions,
+    exports,
+    governance,
+    health,
+    ingestion,
+    observability,
+    signals,
+    simulation,
+    twin,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s api %(name)s %(message)s")
 
@@ -52,3 +67,5 @@ app.include_router(audit.router)
 app.include_router(admin.router)
 app.include_router(simulation.router)
 app.include_router(signals.router)
+app.include_router(actions.router)
+app.include_router(observability.router)

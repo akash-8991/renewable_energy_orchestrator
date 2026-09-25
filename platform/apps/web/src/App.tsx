@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Layout from "./components/Layout";
+import ActionLog from "./pages/ActionLog";
+import AgentObservability from "./pages/AgentObservability";
 import ApprovalInbox from "./pages/ApprovalInbox";
 import AuditExports from "./pages/AuditExports";
 import ConnectorStudio from "./pages/ConnectorStudio";
@@ -37,10 +39,12 @@ function AppRoutes() {
         <Route path="/decisions" element={<DecisionCentre />} />
         <Route path="/approvals" element={<ApprovalInbox />} />
         <Route path="/signals" element={<LiveSignalMonitor />} />
+        <Route path="/actions" element={<ActionLog />} />
         <Route path="/connectors" element={<ConnectorStudio />} />
         <Route path="/documents" element={<DocumentIntake />} />
         <Route path="/policy" element={<PolicyStudio />} />
         <Route path="/simulation" element={<SimulationLab />} />
+        <Route path="/observability" element={<AgentObservability />} />
         <Route path="/audit" element={<AuditExports />} />
         <Route path="/tenant" element={<TenantAdministration />} />
         <Route path="/platform" element={<PlatformOperations />} />
