@@ -52,6 +52,9 @@ platform/
 │                      the secrets vault, digital-twin freshness helpers.
 ├── docs/                Architecture traceability, deliberate simplifications, production
 │                      readiness review, demo script.
+├── launcher/            reo_launcher.py — the stdlib-only Tk app packaged into REO-Launcher.exe
+│                      (see docs/DEPLOYMENT.md Part 0) that gets a Windows machine with only
+│                      Docker Desktop from "double-click" to a running dashboard.
 └── tests/               pytest suite + demo_runner.py (drives the live stack through the
                         doc 08 §4 demo script end-to-end).
 ```
@@ -66,7 +69,18 @@ sets `PYTHONPATH=/app/platform:/app/platform/<service>` so both styles resolve: 
 like `from models.canonical import Asset` for the shared packages, and flat imports like
 `from solver import ...` for files within that service's own directory.
 
-## Quickstart (Docker Compose)
+## Quickstart
+
+**On Windows and don't want to touch a terminal?** Download `REO-Launcher.exe` from the
+[Releases page](https://github.com/akash-8991/renewable_energy_orchestrator/releases), double-click
+it, and follow the prompts — it needs only Docker Desktop, downloads the platform source itself,
+asks for an LLM API key (or skip for the free mock provider), and opens the dashboard when it's
+ready. See `docs/DEPLOYMENT.md` Part 0 for details, or the launcher's source at
+`platform/launcher/reo_launcher.py`.
+
+Otherwise, from a terminal (any OS):
+
+### Docker Compose
 
 Requires Docker Desktop.
 

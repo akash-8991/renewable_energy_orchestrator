@@ -1,12 +1,48 @@
 # Deployment guide
 
-Two paths: **Part A** runs the whole platform on your own machine with Docker Compose (5–10
-minutes, free). **Part B** hosts it for real on AWS using the Terraform in
+**Windows, no terminal at all?** See **Part 0** — download one `.exe`, run it, paste an API key.
+Otherwise: **Part A** runs the whole platform on your own machine with Docker Compose from a
+terminal (5–10 minutes, free). **Part B** hosts it for real on AWS using the Terraform in
 `infrastructure/terraform/` (~45–60 minutes the first time, real AWS cost — see the estimate in
 that section before you start). **Part C** notes what changes on another cloud.
 
 Every command below is written to be copy-pasted as-is from `platform/` unless a step says
 otherwise.
+
+---
+
+## Part 0 — One-click Windows launcher (no terminal, no `git clone`)
+
+For anyone who just wants the dashboard running without touching a command line: download
+**`REO-Launcher.exe`** from the repo's **Releases** page
+(https://github.com/akash-8991/renewable_energy_orchestrator/releases) and double-click it.
+
+What it does, in order:
+
+1. Checks that Docker Desktop is installed and running — if not, it links you to
+   https://www.docker.com/products/docker-desktop/ and lets you retry once it's up. This is the
+   only other thing you need installed; the launcher itself needs nothing (no Python, no Git, no
+   Node).
+2. Downloads this repo's `platform/` source straight from GitHub into a per-user app-data folder
+   (`%LOCALAPPDATA%\REOPlatform` on Windows) — no manual `git clone` needed.
+3. Asks you to pick an LLM provider (OpenRouter/Anthropic/OpenAI) and paste an API key — or skip
+   for the free, deterministic mock provider — and writes it into `infrastructure/.env` for you.
+4. Runs `docker compose up -d --build` (first run: 5–15 minutes while images build), waits for the
+   API to report healthy, then runs the same idempotent `database/seed.py` from A6 below.
+5. Opens the dashboard at http://localhost:5173 in your default browser and shows the demo login
+   from A7's table.
+
+Re-running the launcher later reuses the already-downloaded source and the already-built images —
+it just brings the stack back up. A "Stop platform" button in the launcher's final screen runs
+`docker compose down` when you're done. Everything past this point (A1–A10, B, C) is the
+command-line path the launcher automates — read on if you want to run it by hand, customize it, or
+you're not on Windows.
+
+To build `REO-Launcher.exe` yourself instead of downloading a release build: see
+`.github/workflows/build-launcher.yml` (a `workflow_dispatch` or push to `platform/launcher/**`
+builds it on `windows-latest` and uploads it as an Actions artifact), or run
+`pyinstaller --onefile --windowed --name REO-Launcher platform/launcher/reo_launcher.py` yourself
+on Windows with `pip install pyinstaller`.
 
 ---
 

@@ -1,0 +1,49 @@
+name: Build Windows Launcher
+
+# Compiles platform/launcher/reo_launcher.py into a standalone REO-Launcher.exe
+# with PyInstaller. The launcher itself is stdlib-only (tkinter/subprocess/
+# urllib/zipfile) — end users need nothing but Docker Desktop, and this job
+# needs nothing but PyInstaller to freeze it.
+#
+# - Any push touching the launcher (or this workflow) builds it as a
+#   downloadable Actions artifact, so a change can be sanity-checked without
+#   cutting a release.
+# - Publishing a GitHub Release additionally attaches the .exe to that
+#   release as a public asset — this is the "download from GitHub" path in
+#   docs/DEPLOYMENT.md, and needs no GitHub login to fetch.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "platform/launcher/**"
+      - ".github/workflows/build-launcher.yml"
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build REO-Launcher.exe
+        run: pyinstaller --onefile --windowed --name REO-Launcher platform/launcher/reo_launcher.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: REO-Launcher-windows
+          path: dist/REO-Launcher.exe
+
+      - name: Attach to the published release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/REO-Launcher.exe
