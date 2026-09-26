@@ -74,6 +74,21 @@ body#keycloak-bg {
   padding: 40px;
 }
 .pf-v5-c-login__container {
+  /* The base theme lays this out as CSS Grid (grid-template-columns: 34rem
+     i.e. 544px, from keycloak.v2's own login/resources/css/styles.css) —
+     a track width that has nothing to do with, and is wider than, this
+     card's own 380px max-width below. That mismatch between the grid's
+     declared track size and the element's actual box rendered consistently
+     in some browsers/pane testing but produced a visibly broken card in a
+     real Chrome (header cut off, form fields spilling outside it) —
+     exactly the kind of inconsistency an unresolved grid/box-size conflict
+     causes. Dropping the grid entirely for plain block flow removes the
+     conflict rather than papering over one browser's specific behavior:
+     header and main become ordinary stacked block children, sized purely
+     by their own content, guaranteed consistent everywhere. */
+  display: block !important;
+  grid-template-columns: none !important;
+  grid-template-areas: none !important;
   background: #ffffff;
   border: 1px solid var(--reo-border);
   border-radius: var(--reo-radius);
@@ -81,6 +96,7 @@ body#keycloak-bg {
   padding: 8px;
   max-width: 380px;
   width: 100%;
+  height: auto !important;
 }
 /* PatternFly's base theme gives .pf-v5-c-login__main its own independent
    white background + a large drop-shadow (its "raised panel" look), on top

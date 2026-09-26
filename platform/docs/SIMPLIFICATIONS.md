@@ -259,11 +259,16 @@ dashboard page (`manage:settings`/`manage:platform_config`, backed by a new tena
   of Keycloak's own `keycloak.v2` template with exactly one static brand panel `<div>` inserted,
   matching `Login.tsx`'s `.login-brand` copy/checklist/mark — no Keycloak login logic touched, only
   markup added around it) so the SSO redirect doesn't feel like a jump to a visually unrelated
-  product. PatternFly's own base theme gives `.pf-v5-c-login__main` an independent white
-  background and drop-shadow on top of the outer card — left alone, the brand header and the form
-  rendered as two separately-elevated white boxes with a visible seam (worse on narrow screens,
-  where the header wraps to two lines). `reo.css` neutralizes that inner panel's own elevation so
-  the whole thing reads as the one card `Login.tsx` itself uses.
+  product. Two base-theme quirks needed neutralizing in `reo.css` for the result to actually read
+  as one card, matching `Login.tsx`'s single `.login-box`: PatternFly gives `.pf-v5-c-login__main`
+  its own independent white background and drop-shadow on top of the outer card (left alone, the
+  header and the form rendered as two separately-elevated boxes with a visible seam); and
+  `.pf-v5-c-login__container` is laid out as CSS Grid with a `grid-template-columns: 34rem`
+  (544px) track inherited from `keycloak.v2`'s own stylesheet — unrelated to, and wider than, this
+  card's own 380px `max-width`, a mismatch that rendered consistently in some environments but
+  produced a visibly broken card (header cut off, fields spilling outside it) in a real browser.
+  Forcing plain block flow (`display: block`, no grid) removes that conflict rather than working
+  around one browser's specific behavior.
 - **`market_energy_purchase`/`iot` connector ingestion** — see the Connector Studio section above.
 
 This is deliberately still bounded by the same honesty standard as the rest of this document: the
