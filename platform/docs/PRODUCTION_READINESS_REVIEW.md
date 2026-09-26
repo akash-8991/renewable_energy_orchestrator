@@ -20,7 +20,7 @@ gap between "runs a full, correct decision cycle end-to-end on Docker Compose" (
 |---|---|---|
 | Core decision/control loop | **Real.** Optimizer, independent validator, policy engine, OT gateway, decision ledger, approvals all run real logic against real (simulated) data. | Nothing — this is the part of the spec that's genuinely done. |
 | Agent reasoning quality | Schema-valid, zero-reasoning (`MockModelGateway`) without a key. | An Anthropic key. Also: no prompt-injection red-team pass, no adversarial eval corpus beyond the 3 behavioral cases added this pass (§4 below), no per-agent cost/latency budget or circuit breaker if Anthropic is slow/down mid-cycle (a stuck agent call currently just makes that decision cycle slow — there's no timeout/circuit-breaker around `complete_structured`). |
-| Real-world data ingestion | CSV/JSON/XLSX + PDF/image (D3, this session) ingestion is real. | **No live feed is wired into the pipeline.** Forecast prices are a synthetic sine wave (`forecast.py`); Connector Studio (§4 below) can *register* a market-data/database/SCADA endpoint but nothing reads from one yet. Going live needs an actual scheduled-pull or push-ingestion path from a real market/weather/SCADA source into `Forecast`/`Telemetry`. |
+| Real-world data ingestion | CSV/JSON/XLSX + PDF/image ingestion is real, including via Connector Studio's `data_table` (URL or local path) and `database` (`postgresql://` + table name) kinds (§4 below). | **No live *streaming* feed is wired into the pipeline.** Forecast prices are a synthetic sine wave (`forecast.py`); Connector Studio can *register* a market-data/SCADA endpoint but nothing reads from one yet (`iot`/`market_energy_purchase`/`scada` remain registration-only). Going live needs an actual scheduled-pull or push-ingestion path from a real market/weather/SCADA source into `Forecast`/`Telemetry`. |
 | Real hardware | Simulated throughout (`edge-simulator`, `ot-gateway-sim`) — deliberate per doc 06 §8 ("don't price/build real OT before a site survey"). | A real site survey, a formal OT hazard analysis and safety case (the platform enforces *recording* a `safety_case_ref` before autonomy — it can't manufacture the analysis itself), real OPC UA/SCADA hardware and a commissioning/HIL test pass. |
 | Cloud deployment | Terraform written (`infrastructure/terraform/*.tf` — VPC, ECS Fargate, RDS, ElastiCache, S3+CloudFront, Secrets Manager, ALB), `terraform validate`-clean, step-by-step apply instructions in `docs/DEPLOYMENT.md` Part B, **never `apply`d**. | An actual AWS account, a real `terraform apply`, then load testing against that environment (nothing here has been tested under concurrent load — the whole verification history is single-tenant, low-QPS). |
 | CI/CD | Real: `.github/workflows/ci.yml` runs lint (ruff), the full pytest suite (54 tests) against a migrated Postgres, builds every service image, and runs `demo_runner.py`'s full 10-step script against a live `docker compose up` stack on every push/PR. | No CD (nothing auto-deploys anywhere), no canary/blue-green story, no automated DB backup/restore drill. |
@@ -114,16 +114,22 @@ Fixed the honest part of this gap: added a `kind` field (`generic` / `market_ene
 `scada` / `iot` / `database` / `data_table`) so the page is now explicitly organised around these
 use cases, with inline UI copy that states plainly what's validated (SSRF + HTTP reachability)
 versus what isn't (no live pipeline wiring yet) for each kind. **Deliberately did not** fake a
-deeper integration for five of the six — adding real live-price ingestion, a real DB query path,
-or real OPC-UA dispatch through this UI would each be its own multi-day feature (scheduled
-polling/caching, protocol-specific validation, safety review for anything touching OT), not a
-same-session bolt-on, and `scada` never will connect to real dispatch regardless of effort
-available — doc 05's architecture keeps that on `ot-gateway-sim` exclusively, by design. A later
-session did wire the sixth, `data_table`: `POST /connectors/{id}/ingest` fetches and parses its
-`endpoint_url` as telemetry, the same validated path a file upload goes through — see
-`SIMPLIFICATIONS.md`'s "Portfolio-wide start/stop gate" section for the fuller picture (this also
-now gates the dashboard/decision cycle behind an explicit Start, requiring a connected data source
-first).
+deeper integration for four of the six — adding real live-price ingestion or real OPC-UA dispatch
+through this UI would each be its own multi-day feature (scheduled polling/caching,
+protocol-specific validation, safety review for anything touching OT), not a same-session
+bolt-on, and `scada` never will connect to real dispatch regardless of effort available — doc 05's
+architecture keeps that on `ot-gateway-sim` exclusively, by design. Two later sessions wired the
+other two: `data_table`'s `POST /connectors/{id}/ingest` fetches (an http(s) URL, or a path under
+the platform's own watched local data folder) and parses its target as telemetry, the same
+validated path a file upload goes through; `database`'s `endpoint_url` is instead a real
+`postgresql://` connection string (egress-checked against an explicit host allow-list, not a
+generic SSRF exemption) — `POST /connectors/{id}/ingest` with a `table_name` reflects and pulls
+that table in via SQLAlchemy, no raw SQL string interpolation of the table name. Either kind, when
+the file/table name matches one of the reference dataset's own files, routes through
+`hackathon_dataset.py`'s canonical Asset/Customer mapping instead of the generic
+telemetry shape — see `SIMPLIFICATIONS.md`'s "Portfolio-wide start/stop gate" section for the
+fuller picture (this also now gates the dashboard/decision cycle behind an explicit Start,
+requiring a connected data source first).
 
 ### Per-action ticket log, exportable
 
@@ -159,9 +165,9 @@ Roughly in the order a real deployment would need them:
    down Anthropic API degrades a decision cycle gracefully instead of just running long.
 7. **Expand the eval harness** with a real labelled corpus once real usage data exists to draw one
    from.
-8. **Wire a `market_energy_purchase`/`database`/`iot` Connector into the actual data path** it's
-   now explicitly categorised for, once one is registered against a real endpoint (`data_table` is
-   done; `scada` is deliberately excluded from this list — see above).
+8. **Wire a `market_energy_purchase`/`iot` Connector into the actual data path** it's now
+   explicitly categorised for, once one is registered against a real endpoint (`data_table` and
+   `database` are done; `scada` is deliberately excluded from this list — see above).
 
 None of these are hidden — each is either already flagged in `SIMPLIFICATIONS.md` or added there/
 here by this review. The platform's own standing practice (documented in every prior commit

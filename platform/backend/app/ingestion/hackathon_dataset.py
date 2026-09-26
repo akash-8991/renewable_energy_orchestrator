@@ -42,15 +42,18 @@ from __future__ import annotations
 
 import csv
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from database.connection import SessionLocal, break_glass_cross_tenant
-from models.canonical import Asset, Customer, CustomerReading, Tenant
 from reo_common.config import get_settings
 from reo_common.events import EventBus
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
+
+from database.connection import SessionLocal, break_glass_cross_tenant
+from models.canonical import Asset, Customer, CustomerReading, Tenant
 
 from .file_ingest import publish_readings
 
@@ -280,6 +283,237 @@ def ingest_customers() -> dict[str, int]:
         return {"customers": len(customer_id_by_ref), "customer_reading_days": len(insert_rows)}
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Connector-driven ingestion — same reference-dataset mapping as above, but
+# called from a live authenticated request (backend/app/routers/connectors.py)
+# instead of the standalone script's own SessionLocal()/break_glass lifecycle,
+# and keyed to a single already-loaded file/table's rows rather than a fixed
+# lookback window. Two connector kinds feed this: a `data_table` connector
+# whose path resolves to one of these filenames, and a `database` connector
+# whose table_name matches one of these keys — either way, by the time rows
+# reach ingest_reference_rows() they're just plain dicts (str values from a
+# CSV, native types from a DB row); every field access below tolerates both.
+#
+# Deliberately NOT sharing code with ingest_portfolio_series()/
+# ingest_customers() above: those are already-verified, hours-windowed,
+# break_glass-based logic for the manual script, and duplicating their small
+# per-file mappings here (this time un-windowed, request-scoped, no
+# break_glass) is less risky than threading two very different call contexts
+# through one shared implementation.
+# ---------------------------------------------------------------------------
+
+KNOWN_TABLE_KEYS = {
+    "customer_demographics",
+    "customer_energy_consumption_tariff",
+    "renewable_generation",
+    "grid",
+    "market",
+    "external_weather",
+    "battery",
+    "scenario_actions",
+}
+
+# Present in the reference dataset but not (yet) mapped onto a canonical
+# entity — same documented gap as ingest_portfolio_series()/ingest_customers()
+# above, just also enforced for the connector paths instead of silently
+# ingesting nothing.
+UNMAPPED_TABLE_KEYS = {"battery", "scenario_actions"}
+
+
+def normalize_table_key(name: str) -> str:
+    """"03_renewable_generation.csv" (a data_table connector's local
+    filename) and "renewable_generation" (a database connector's table
+    name) both normalize to "renewable_generation" — one recognizer for
+    both connector kinds."""
+    stem = Path(name).stem
+    stem = re.sub(r"^\d+[_-]", "", stem)
+    return stem.strip().lower()
+
+
+def _by_type_and_grid(db: Session, tenant_id: str) -> tuple[dict[str, list[Asset]], Asset | None]:
+    assets = db.execute(select(Asset).where(Asset.tenant_id == tenant_id)).scalars().all()
+    by_type: dict[str, list[Asset]] = {}
+    grid = None
+    for a in assets:
+        by_type.setdefault(a.asset_type, []).append(a)
+        if a.asset_type == "grid_interconnection":
+            grid = a
+    return by_type, grid
+
+
+def _row_ts(row: dict, key: str = "timestamp") -> str:
+    value = row[key]
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def _upsert_customer_demographics_rows(db: Session, tenant_id: str, rows: list[dict]) -> int:
+    count = 0
+    for row in rows:
+        stmt = pg_insert(Customer).values(
+            tenant_id=tenant_id, customer_ref=row["customer_id"],
+            customer_type=row["customer_type"], region=row["region"],
+            annual_consumption_kwh=float(row["annual_consumption_kwh"] or 0),
+            renewable_profile=row["renewable_profile"] or None,
+            solar_capacity_kw=float(row["solar_capacity_kw"] or 0),
+            wind_capacity_kw=float(row["wind_capacity_kw"] or 0),
+            battery_installed=str(row["battery_installed"]) in ("1", "True", "true"),
+            battery_capacity_kwh=float(row["battery_capacity_kwh"] or 0),
+            tariff_plan=row["tariff_plan"] or None,
+            standing_charge_gbp_day=_to_float(row["standing_charge_gbp_day"]),
+            base_rate_gbp_kwh=_to_float(row["base_rate_gbp_kwh"]),
+            offpeak_rate_gbp_kwh=_to_float(row["offpeak_rate_gbp_kwh"]),
+            occupants=_to_float(row["occupants"]),
+            property_size_m2=_to_float(row["property_size_m2"]),
+            business_size=row["business_size"] or None,
+        ).on_conflict_do_nothing(constraint="uq_customer_ref")
+        result = db.execute(stmt)
+        count += result.rowcount or 0
+    db.flush()
+    return count
+
+
+def _upsert_customer_reading_rows(db: Session, tenant_id: str, rows: list[dict]) -> tuple[int, int]:
+    customer_id_by_ref = {
+        ref: cid
+        for cid, ref in db.execute(
+            select(Customer.id, Customer.customer_ref).where(Customer.tenant_id == tenant_id)
+        ).all()
+    }
+
+    daily: dict[tuple[str, str], dict[str, float]] = {}
+    for row in rows:
+        ref = row["customer_id"]
+        day = _row_ts(row)[:10]
+        bucket = daily.setdefault((ref, day), {
+            "consumption_kwh": 0.0, "solar_generation_kwh": 0.0, "wind_generation_kwh": 0.0,
+            "net_grid_import_kwh": 0.0, "export_kwh": 0.0, "energy_cost_gbp": 0.0, "standing_charge_gbp": 0.0,
+        })
+        consumption = float(row["consumption_kwh"] or 0)
+        rate = float(row["energy_rate_gbp_kwh"] or 0)
+        bucket["consumption_kwh"] += consumption
+        bucket["solar_generation_kwh"] += float(row["solar_generation_kwh"] or 0)
+        bucket["wind_generation_kwh"] += float(row["wind_generation_kwh"] or 0)
+        bucket["net_grid_import_kwh"] += float(row["net_grid_import_kwh"] or 0)
+        bucket["export_kwh"] += float(row["export_kwh"] or 0)
+        bucket["energy_cost_gbp"] += consumption * rate
+        bucket["standing_charge_gbp"] += float(row["standing_charge_gbp_15min"] or 0)
+
+    insert_rows = []
+    skipped_unknown_customer = 0
+    for (ref, day), agg in daily.items():
+        cid = customer_id_by_ref.get(ref)
+        if cid is None:
+            skipped_unknown_customer += 1
+            continue
+        insert_rows.append({
+            "tenant_id": tenant_id, "customer_id": cid,
+            "event_time": datetime.fromisoformat(day).replace(tzinfo=timezone.utc),
+            "consumption_kwh": agg["consumption_kwh"], "solar_generation_kwh": agg["solar_generation_kwh"],
+            "wind_generation_kwh": agg["wind_generation_kwh"], "net_grid_import_kwh": agg["net_grid_import_kwh"],
+            "export_kwh": agg["export_kwh"],
+            "avg_energy_rate_gbp_kwh": (agg["energy_cost_gbp"] / agg["consumption_kwh"]) if agg["consumption_kwh"] else 0.0,
+            "estimated_cost_gbp": agg["energy_cost_gbp"] + agg["standing_charge_gbp"],
+        })
+
+    BATCH = 1000
+    for i in range(0, len(insert_rows), BATCH):
+        chunk = insert_rows[i:i + BATCH]
+        stmt = pg_insert(CustomerReading).on_conflict_do_nothing(constraint="uq_customer_reading")
+        db.execute(stmt, chunk)
+    db.flush()
+    return len(insert_rows), skipped_unknown_customer
+
+
+def ingest_reference_rows(db: Session, tenant_id: str, table_key: str, rows: list[dict], *, source_label: str) -> dict:
+    """Routes already-loaded rows for one of the reference dataset's known
+    tables through the platform's canonical mapping — real Asset telemetry
+    for the four portfolio-level series, real Customer/CustomerReading rows
+    for the two retail-customer files. Always returns a summary dict with at
+    least {"table", "status"} rather than raising, so a connector's ingest
+    endpoint can report a clear per-table outcome instead of a 500."""
+    if table_key not in KNOWN_TABLE_KEYS:
+        return {"table": table_key, "status": "unknown", "message": f"{table_key!r} isn't a recognized reference-dataset table"}
+    if table_key in UNMAPPED_TABLE_KEYS:
+        return {"table": table_key, "status": "not_mapped",
+                "message": f"{table_key!r} isn't mapped onto a canonical entity yet (see hackathon_dataset.py's documented scope)"}
+    if not rows:
+        return {"table": table_key, "status": "empty", "count": 0}
+
+    bus = EventBus()
+
+    if table_key == "renewable_generation":
+        by_type, _grid = _by_type_and_grid(db, tenant_id)
+        solar_assets, wind_assets = by_type.get("solar", []), by_type.get("wind", [])
+        if not solar_assets or not wind_assets:
+            return {"table": table_key, "status": "error", "message": "tenant has no solar/wind assets — run database/seed.py first"}
+        timestamps = _shifted_timestamps(len(rows))
+        readings = []
+        for row, ts in zip(rows, timestamps):
+            solar_kw = float(row["solar_output_mw"]) * 1000.0
+            wind_kw = float(row["wind_output_mw"]) * 1000.0
+            for asset, share_kw in _split_by_capacity(solar_kw, solar_assets):
+                readings.append({"asset_id": asset.id, "metric": "power_kw", "event_time": ts, "value": share_kw,
+                                  "unit": "kW", "quality": "good", "source": source_label})
+            for asset, share_kw in _split_by_capacity(wind_kw, wind_assets):
+                readings.append({"asset_id": asset.id, "metric": "power_kw", "event_time": ts, "value": share_kw,
+                                  "unit": "kW", "quality": "good", "source": source_label})
+        lineage_id = publish_readings(bus, tenant_id, readings)
+        return {"table": table_key, "status": "ingested", "count": len(readings), "lineage_id": lineage_id, "kind": "telemetry"}
+
+    if table_key == "grid":
+        _by_type, grid = _by_type_and_grid(db, tenant_id)
+        if grid is None:
+            return {"table": table_key, "status": "error", "message": "tenant has no grid_interconnection asset"}
+        timestamps = _shifted_timestamps(len(rows))
+        readings = [
+            {"asset_id": grid.id, "metric": "frequency_hz", "event_time": ts, "value": float(row["grid_frequency_hz"]),
+             "unit": "Hz", "quality": "good", "source": source_label}
+            for row, ts in zip(rows, timestamps)
+        ]
+        lineage_id = publish_readings(bus, tenant_id, readings)
+        return {"table": table_key, "status": "ingested", "count": len(readings), "lineage_id": lineage_id, "kind": "telemetry"}
+
+    if table_key == "market":
+        _by_type, grid = _by_type_and_grid(db, tenant_id)
+        if grid is None:
+            return {"table": table_key, "status": "error", "message": "tenant has no grid_interconnection asset"}
+        timestamps = _shifted_timestamps(len(rows))
+        readings = [
+            {"asset_id": grid.id, "metric": "market_price_gbp_per_mwh", "event_time": ts,
+             "value": float(row["electricity_price_gbp_mwh"]), "unit": "GBP/MWh", "quality": "good", "source": source_label}
+            for row, ts in zip(rows, timestamps)
+        ]
+        lineage_id = publish_readings(bus, tenant_id, readings)
+        return {"table": table_key, "status": "ingested", "count": len(readings), "lineage_id": lineage_id, "kind": "telemetry"}
+
+    if table_key == "external_weather":
+        by_type, _grid = _by_type_and_grid(db, tenant_id)
+        solar_assets, wind_assets = by_type.get("solar", []), by_type.get("wind", [])
+        timestamps = _shifted_timestamps(len(rows))
+        readings = []
+        for row, ts in zip(rows, timestamps):
+            temp = float(row["temperature_c"])
+            wind_speed = float(row["wind_speed_mps"])
+            for asset in solar_assets:
+                readings.append({"asset_id": asset.id, "metric": "temperature_c", "event_time": ts, "value": temp,
+                                  "unit": "C", "quality": "good", "source": source_label})
+            for asset in wind_assets:
+                readings.append({"asset_id": asset.id, "metric": "wind_speed_ms", "event_time": ts, "value": wind_speed,
+                                  "unit": "m/s", "quality": "good", "source": source_label})
+        lineage_id = publish_readings(bus, tenant_id, readings)
+        return {"table": table_key, "status": "ingested", "count": len(readings), "lineage_id": lineage_id, "kind": "telemetry"}
+
+    if table_key == "customer_demographics":
+        count = _upsert_customer_demographics_rows(db, tenant_id, rows)
+        return {"table": table_key, "status": "ingested", "count": count, "kind": "customers"}
+
+    if table_key == "customer_energy_consumption_tariff":
+        count, skipped = _upsert_customer_reading_rows(db, tenant_id, rows)
+        return {"table": table_key, "status": "ingested", "count": count, "skipped_unknown_customer": skipped, "kind": "customer_readings"}
+
+    raise AssertionError(f"unhandled known table_key {table_key!r}")  # pragma: no cover — KNOWN_TABLE_KEYS/UNMAPPED_TABLE_KEYS above are exhaustive for every branch here
 
 
 def main() -> None:

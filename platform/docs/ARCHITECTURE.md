@@ -90,7 +90,7 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Approval Inbox | `GET /governance/approvals`, `POST /governance/approvals/{id}/decide` |
 | Live Signal Monitor | `GET /signals` |
 | Action Tickets | `GET /actions` |
-| Connector Studio | `GET/POST /connectors` (incl. `kind`: generic/market_energy_purchase/scada/iot/database/data_table), `POST /connectors/{id}/{test,activate,disable,ingest}` (`ingest`: `data_table` only — fetches+parses `endpoint_url` as telemetry) |
+| Connector Studio | `GET/POST /connectors` (incl. `kind`: generic/market_energy_purchase/scada/iot/database/data_table), `POST /connectors/{id}/{test,activate,disable,ingest}` (`ingest`: `data_table` (URL or local watched-folder path) and `database` (`postgresql://` connection string + table name) fetch/query and route recognized reference-dataset files/tables through `hackathon_dataset.py`'s canonical mapping, else the generic telemetry shape) |
 | Policy Studio | `GET/PUT /governance/autonomy-policy`, `GET/PUT /governance/objective-policy`, `POST /governance/e-stop` |
 | Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
 | Agent Observability | `GET /observability/summary`, `GET /observability/agent-calls`, `GET/POST /observability/eval-runs[/run]` |

@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 
 import openpyxl
-from reo_common.events import CloudEvent, EventBus, STREAM_TELEMETRY, new_correlation_id
+from reo_common.events import STREAM_TELEMETRY, CloudEvent, EventBus, new_correlation_id
 
 log = logging.getLogger("api.ingestion.file")
 
@@ -51,17 +51,23 @@ def _rows_from_xlsx(content: bytes) -> list[dict]:
     return rows
 
 
-def parse_telemetry_file(filename: str, content: bytes) -> list[dict]:
+def rows_from_file(filename: str, content: bytes) -> list[dict]:
+    """Raw rows (untyped, unmapped) for any supported file type. Used by
+    parse_telemetry_file() below for the generic asset_id/metric/event_time/
+    value/unit shape, and by hackathon_dataset.py's reference-table ingestion
+    for the reference dataset's own, different, per-file column shapes."""
     suffix = Path(filename).suffix.lower()
     if suffix == ".csv":
-        rows = _rows_from_csv(content)
-    elif suffix == ".json":
-        rows = _rows_from_json(content)
-    elif suffix in (".xlsx", ".xlsm"):
-        rows = _rows_from_xlsx(content)
-    else:
-        raise ValueError(f"unsupported file type: {suffix} (supported: .csv, .json, .xlsx)")
+        return _rows_from_csv(content)
+    if suffix == ".json":
+        return _rows_from_json(content)
+    if suffix in (".xlsx", ".xlsm"):
+        return _rows_from_xlsx(content)
+    raise ValueError(f"unsupported file type: {suffix} (supported: .csv, .json, .xlsx)")
 
+
+def parse_telemetry_file(filename: str, content: bytes) -> list[dict]:
+    rows = rows_from_file(filename, content)
     normalised = []
     for row in rows:
         row = {str(k).strip().lower(): v for k, v in row.items() if k is not None}

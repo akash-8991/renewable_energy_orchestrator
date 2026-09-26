@@ -49,6 +49,29 @@ def _is_blocked_ip(ip_str: str) -> bool:
     return any(ip in net for net in BLOCKED_NETWORKS) or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved
 
 
+def check_outbound_host(hostname: str, port: int, *, tenant_egress_allowlist: list[str] | None = None) -> SsrfCheckResult:
+    """The scheme-agnostic core of check_outbound_url() below — re-resolves
+    DNS at call time and rejects anything pointing at a blocked range.
+    Factored out so a non-HTTP egress (e.g. a `database`-kind connector's
+    raw connection string, which has no URL scheme check_outbound_url would
+    accept) still goes through the same IP-blocking logic rather than a
+    separately maintained copy of it."""
+    if hostname in (tenant_egress_allowlist or []):
+        return SsrfCheckResult(True, "explicit tenant egress allowlist match")
+
+    try:
+        resolved = socket.getaddrinfo(hostname, port)
+    except socket.gaierror as exc:
+        return SsrfCheckResult(False, f"DNS resolution failed: {exc}")
+
+    for family, _, _, _, sockaddr in resolved:
+        ip_str = sockaddr[0]
+        if _is_blocked_ip(ip_str):
+            return SsrfCheckResult(False, f"resolved IP {ip_str} is in a blocked range", resolved_ip=ip_str)
+
+    return SsrfCheckResult(True, resolved_ip=resolved[0][4][0])
+
+
 def check_outbound_url(url: str, *, tenant_egress_allowlist: list[str] | None = None) -> SsrfCheckResult:
     """Re-resolve DNS at call time and reject anything pointing at a blocked
     range. `tenant_egress_allowlist` (hostnames or CIDRs) lets a tenant
@@ -59,17 +82,8 @@ def check_outbound_url(url: str, *, tenant_egress_allowlist: list[str] | None = 
         return SsrfCheckResult(False, f"scheme not allowed: {parsed.scheme}")
     if not parsed.hostname:
         return SsrfCheckResult(False, "no hostname in URL")
-    if parsed.hostname in (tenant_egress_allowlist or []):
-        return SsrfCheckResult(True, "explicit tenant egress allowlist match")
-
-    try:
-        resolved = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
-    except socket.gaierror as exc:
-        return SsrfCheckResult(False, f"DNS resolution failed: {exc}")
-
-    for family, _, _, _, sockaddr in resolved:
-        ip_str = sockaddr[0]
-        if _is_blocked_ip(ip_str):
-            return SsrfCheckResult(False, f"resolved IP {ip_str} is in a blocked range", resolved_ip=ip_str)
-
-    return SsrfCheckResult(True, resolved_ip=resolved[0][4][0])
+    return check_outbound_host(
+        parsed.hostname,
+        parsed.port or (443 if parsed.scheme == "https" else 80),
+        tenant_egress_allowlist=tenant_egress_allowlist,
+    )

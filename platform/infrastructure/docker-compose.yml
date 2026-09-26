@@ -78,6 +78,30 @@ services:
       mc mb -p local/reo-exports local/reo-lakehouse local/reo-quarantine &&
       exit 0"
 
+  # Stands in for "a client's own database" — pre-loaded on first boot (see
+  # source-db-init/) with the reference dataset's 8 CSVs as real SQL tables,
+  # so Connector Studio's `database` kind (backend/app/routers/connectors.py)
+  # has something real to connect a connection string to, alongside the
+  # `data_table` kind's local-path option pointed at the same files. Not
+  # reachable from outside the docker network by name — only `source-db` is
+  # in the database-connector egress allowlist (see connectors.py).
+  source-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: reo_source
+      POSTGRES_PASSWORD: reo-source-secret
+      POSTGRES_DB: client_export
+    ports: ["127.0.0.1:5434:5432"]  # host-side access for manual poking (psql); containers use "source-db:5432"
+    volumes:
+      - reo-source-db-data:/var/lib/postgresql/data
+      - ../../data:/csv:ro
+      - ./source-db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reo_source -d client_export"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   migrate:
     build: { context: ../.., dockerfile: platform/backend/Dockerfile }
     environment: *python-env
@@ -150,3 +174,4 @@ services:
 volumes:
   reo-postgres-data:
   reo-minio-data:
+  reo-source-db-data:

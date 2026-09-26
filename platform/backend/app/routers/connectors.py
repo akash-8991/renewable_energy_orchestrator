@@ -13,19 +13,77 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from output.audit import append_audit_event
-from models.canonical import Connector, CredentialRef, Tenant
+from reo_common.config import get_settings
 from reo_common.secrets import get_secrets_provider
 from reo_common.security import AuthContext
-from guardrails.ssrf import check_outbound_url
 from sqlalchemy import select
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
+from guardrails.ssrf import check_outbound_host, check_outbound_url
+from models.canonical import Connector, CredentialRef, Tenant
+from output.audit import append_audit_event
+
 from ..deps import db_session, require_permission
-from ..ingestion.file_ingest import parse_telemetry_file, publish_readings
+from ..ingestion.db_source import rows_from_db_table, test_db_connection
+from ..ingestion.file_ingest import (
+    parse_telemetry_file,
+    publish_readings,
+    rows_from_file,
+)
+from ..ingestion.hackathon_dataset import (
+    KNOWN_TABLE_KEYS,
+    ingest_reference_rows,
+    normalize_table_key,
+)
 from .operations import mark_started_if_idle
 
 router = APIRouter(prefix="/connectors", tags=["connectors"])
+settings = get_settings()
+
+# A `database`-kind connector's endpoint_url is a raw Postgres connection
+# string, not an HTTP endpoint — check_outbound_url (scheme-restricted to
+# http/https) can't validate it, and its host will usually resolve inside
+# docker's private address space (blocked by default, same as any other
+# private IP a user-typed endpoint might resolve to). This demo's only
+# legitimate internal DB target is the reference `source-db` container
+# (see infrastructure/docker-compose.yml), so it's the only host allowed —
+# a real deployment would instead let a tenant admin maintain this list,
+# the same tenant_egress_allowlist mechanism check_outbound_host/_url
+# already support for HTTP connectors.
+DATABASE_CONNECTOR_ALLOWED_HOSTS = ["source-db"]
+
+
+def _is_local_data_table_path(kind: str, endpoint_url: str) -> bool:
+    return kind == "data_table" and not endpoint_url.startswith(("http://", "https://"))
+
+
+def _resolve_local_data_path(path_str: str) -> Path:
+    """Resolves a data_table connector's non-URL endpoint_url against
+    DATA_WATCH_DIR (the same read-only mount the background folder-watcher
+    scans) and rejects anything that would escape it (e.g. "../../etc")."""
+    watch_dir = Path(settings.data_watch_dir).resolve()
+    candidate = (watch_dir / path_str.lstrip("/")).resolve()
+    if candidate != watch_dir and watch_dir not in candidate.parents:
+        raise ValueError("path must stay inside the platform's watched data folder")
+    return candidate
+
+
+def _validate_database_connector_url(url: str) -> str | None:
+    """Returns an error message, or None if the connection string is an
+    allowed postgresql:// target."""
+    try:
+        parsed = make_url(url)
+    except Exception as exc:  # noqa: BLE001 — surfaced to the caller as a validation error
+        return f"invalid database connection string: {exc}"
+    if not parsed.drivername.startswith("postgresql"):
+        return f"only postgresql connection strings are supported (got {parsed.drivername!r})"
+    if not parsed.host:
+        return "connection string has no host"
+    result = check_outbound_host(parsed.host, parsed.port or 5432, tenant_egress_allowlist=DATABASE_CONNECTOR_ALLOWED_HOSTS)
+    if not result.allowed:
+        return f"host rejected by egress policy: {result.reason}"
+    return None
 
 
 class ConnectorCreateRequest(BaseModel):
@@ -51,6 +109,7 @@ class ConnectorSummary(BaseModel):
     status: str
     auth_type: str | None
     credential_masked: dict | None
+    schema_mapping: dict
     created_by: str | None
     activated_by: str | None
     last_test_result: dict | None
@@ -67,7 +126,8 @@ def _to_summary(db: Session, c: Connector) -> ConnectorSummary:
             masked = get_secrets_provider().masked_summary(cred.encrypted_payload)
     return ConnectorSummary(
         id=c.id, name=c.name, kind=c.kind, endpoint_url=c.endpoint_url, method=c.method, status=c.status,
-        auth_type=auth_type, credential_masked=masked, created_by=c.created_by, activated_by=c.activated_by,
+        auth_type=auth_type, credential_masked=masked, schema_mapping=c.schema_mapping or {},
+        created_by=c.created_by, activated_by=c.activated_by,
         last_test_result=c.last_test_result, created_at=c.created_at.isoformat(),
     )
 
@@ -84,9 +144,19 @@ def create_connector(
     ctx: AuthContext = Depends(require_permission("manage:connectors")),
     db: Session = Depends(db_session),
 ) -> ConnectorSummary:
-    ssrf_result = check_outbound_url(body.endpoint_url)
-    if not ssrf_result.allowed:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"endpoint rejected by egress policy: {ssrf_result.reason}")
+    if body.kind == "database":
+        db_error = _validate_database_connector_url(body.endpoint_url)
+        if db_error:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, db_error)
+    elif _is_local_data_table_path(body.kind, body.endpoint_url):
+        try:
+            _resolve_local_data_path(body.endpoint_url)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    else:
+        ssrf_result = check_outbound_url(body.endpoint_url)
+        if not ssrf_result.allowed:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"endpoint rejected by egress policy: {ssrf_result.reason}")
 
     credential_ref_id = None
     if body.auth_type != "none" and body.credential_payload:
@@ -127,19 +197,38 @@ def test_connector(
     if connector is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "connector not found")
 
-    ssrf_result = check_outbound_url(connector.endpoint_url)
-    result = ConnectorTestResult(ssrf_allowed=ssrf_result.allowed, ssrf_reason=ssrf_result.reason)
-
-    if ssrf_result.allowed:
-        import httpx
+    if connector.kind == "database":
+        db_error = _validate_database_connector_url(connector.endpoint_url)
+        result = ConnectorTestResult(ssrf_allowed=db_error is None, ssrf_reason=db_error)
+        if db_error is None:
+            ok, err = test_db_connection(connector.endpoint_url)
+            result.http_reachable = ok  # repurposed here as "connected and ran SELECT 1", not an HTTP status
+            result.error = err
+    elif _is_local_data_table_path(connector.kind, connector.endpoint_url):
         try:
-            with httpx.Client(timeout=connector.timeout_seconds) as client:
-                resp = client.request(connector.method, connector.endpoint_url, headers=connector.headers)
-            result.http_reachable = True
-            result.http_status = resp.status_code
-        except httpx.HTTPError as exc:
-            result.http_reachable = False
-            result.error = str(exc)
+            candidate = _resolve_local_data_path(connector.endpoint_url)
+            exists = candidate.is_file()
+        except ValueError as exc:
+            result = ConnectorTestResult(ssrf_allowed=False, ssrf_reason=str(exc))
+        else:
+            result = ConnectorTestResult(ssrf_allowed=True, ssrf_reason=None)
+            result.http_reachable = exists  # repurposed here as "file exists under the watched folder"
+            if not exists:
+                result.error = f"{connector.endpoint_url!r} was not found under the watched data folder"
+    else:
+        ssrf_result = check_outbound_url(connector.endpoint_url)
+        result = ConnectorTestResult(ssrf_allowed=ssrf_result.allowed, ssrf_reason=ssrf_result.reason)
+
+        if ssrf_result.allowed:
+            import httpx
+            try:
+                with httpx.Client(timeout=connector.timeout_seconds) as client:
+                    resp = client.request(connector.method, connector.endpoint_url, headers=connector.headers)
+                result.http_reachable = True
+                result.http_status = resp.status_code
+            except httpx.HTTPError as exc:
+                result.http_reachable = False
+                result.error = str(exc)
 
     connector.status = "testing"
     connector.last_test_result = result.model_dump()
@@ -188,58 +277,123 @@ def disable_connector(
 
 
 # ---------------------------------------------------------------------------
-# data_table ingestion — the one connector kind that's actually wired to a
-# real effect. A market_energy_purchase/scada/iot connector registers and
+# data_table / database ingestion — the two connector kinds actually wired to
+# a real effect. A market_energy_purchase/scada/iot connector registers and
 # reachability-tests its endpoint (same as before, see ARCHITECTURE.md for
-# what's registration-only vs live); a data_table connector's endpoint_url
-# is instead fetched and parsed as a telemetry file, through the identical
-# parse_telemetry_file()/publish_readings() path a CSV/JSON/XLSX upload
-# already goes through in ingestion.py — same validation, same quarantine
-# path, same canonical reading shape (asset_id/metric/event_time/value/unit)
-# is expected.
+# what's registration-only vs live); data_table and database connectors
+# instead pull real rows in, either as generic telemetry (the
+# asset_id/metric/event_time/value/unit shape a file upload also uses) or,
+# for a filename/table name matching one of the reference dataset's own
+# files, through hackathon_dataset.py's canonical Asset/Customer mapping —
+# same validation, same quarantine path either way.
 # ---------------------------------------------------------------------------
 
 
+class ConnectorIngestRequest(BaseModel):
+    table_name: str | None = None  # database connectors only; data_table ignores this
+
+
 class ConnectorIngestResponse(BaseModel):
-    lineage_id: str
+    lineage_id: str | None = None
     rows_queued: int
+    detail: dict | None = None  # set when a recognized reference-dataset file/table was routed through hackathon_dataset.py
+
+
+def _finish_ingest(
+    db: Session, ctx: AuthContext, connector: Connector, *, rows_queued: int, lineage_id: str | None, detail: dict | None,
+) -> ConnectorIngestResponse:
+    if rows_queued:
+        tenant = db.execute(select(Tenant).where(Tenant.id == ctx.tenant_id)).scalar_one_or_none()
+        if tenant is not None:
+            mark_started_if_idle(db, tenant, actor_id=ctx.user_id, actor_label=ctx.email, reason=f"connector:{connector.name}")
+
+    append_audit_event(db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
+                        event_type="connector.ingested",
+                        payload={"connector_id": connector.id, "rows_queued": rows_queued, **({"detail": detail} if detail else {})})
+    db.commit()
+    return ConnectorIngestResponse(lineage_id=lineage_id, rows_queued=rows_queued, detail=detail)
 
 
 @router.post("/{connector_id}/ingest", response_model=ConnectorIngestResponse)
 def ingest_connector(
-    connector_id: str, ctx: AuthContext = Depends(require_permission("manage:connectors")), db: Session = Depends(db_session)
+    connector_id: str,
+    body: ConnectorIngestRequest = ConnectorIngestRequest(),
+    ctx: AuthContext = Depends(require_permission("manage:connectors")),
+    db: Session = Depends(db_session),
 ) -> ConnectorIngestResponse:
     connector = db.execute(select(Connector).where(Connector.id == connector_id)).scalar_one_or_none()
     if connector is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "connector not found")
-    if connector.kind != "data_table":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"kind={connector.kind!r} is registration/reachability-test only — only data_table connectors ingest")
+    if connector.kind not in ("data_table", "database"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"kind={connector.kind!r} is registration/reachability-test only — only data_table/database connectors ingest")
     if connector.status != "active":
         raise HTTPException(status.HTTP_409_CONFLICT, f"connector must be active to ingest (currently {connector.status}) — test then activate it first")
 
-    ssrf_result = check_outbound_url(connector.endpoint_url)
-    if not ssrf_result.allowed:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"endpoint rejected by egress policy: {ssrf_result.reason}")
+    if connector.kind == "database":
+        table_name = body.table_name or (connector.schema_mapping or {}).get("table_name")
+        if not table_name:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                 "table_name is required — pass it in the request body, or set schema_mapping.table_name when creating the connector")
+        db_error = _validate_database_connector_url(connector.endpoint_url)
+        if db_error:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, db_error)
+        try:
+            rows = rows_from_db_table(connector.endpoint_url, table_name)
+        except Exception as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"could not read table {table_name!r}: {exc}") from exc
 
-    filename = Path(connector.endpoint_url.split("?")[0]).name or "connector-data"
-    if Path(filename).suffix.lower() not in (".csv", ".json", ".xlsx", ".xlsm"):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"endpoint_url must end in .csv/.json/.xlsx (got {filename!r}) — same file-type support as a Document Intake upload",
-        )
+        table_key = normalize_table_key(table_name)
+        result = ingest_reference_rows(db, ctx.tenant_id, table_key, rows, source_label=f"connector:{connector.name}:{table_name}")
+        return _finish_ingest(db, ctx, connector, rows_queued=result.get("count", 0), lineage_id=result.get("lineage_id"), detail=result)
 
-    import httpx
+    # kind == "data_table": endpoint_url is either an http(s) URL (fetched
+    # over the network, SSRF-checked) or a path under the platform's watched
+    # local data folder (DATA_WATCH_DIR — the same read-only mount the
+    # background folder-watcher scans). The local-path form needs no SSRF
+    # check: it never leaves the filesystem, unlike an outbound URL a human
+    # could point anywhere.
+    is_remote = connector.endpoint_url.startswith(("http://", "https://"))
+    if is_remote:
+        ssrf_result = check_outbound_url(connector.endpoint_url)
+        if not ssrf_result.allowed:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"endpoint rejected by egress policy: {ssrf_result.reason}")
 
-    try:
-        with httpx.Client(timeout=connector.timeout_seconds) as client:
-            # Always GET regardless of the connector's own `method` field
-            # (default "POST", meaningful for an action-invoking connector)
-            # — this is a data fetch, not an action call.
-            resp = client.get(connector.endpoint_url, headers=connector.headers)
-            resp.raise_for_status()
-            content = resp.content
-    except httpx.HTTPError as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"could not fetch {connector.endpoint_url}: {exc}") from exc
+        filename = Path(connector.endpoint_url.split("?")[0]).name or "connector-data"
+        if Path(filename).suffix.lower() not in (".csv", ".json", ".xlsx", ".xlsm"):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"endpoint_url must end in .csv/.json/.xlsx (got {filename!r}) — same file-type support as a Document Intake upload",
+            )
+
+        import httpx
+
+        try:
+            with httpx.Client(timeout=connector.timeout_seconds) as client:
+                # Always GET regardless of the connector's own `method` field
+                # (default "POST", meaningful for an action-invoking connector)
+                # — this is a data fetch, not an action call.
+                resp = client.get(connector.endpoint_url, headers=connector.headers)
+                resp.raise_for_status()
+                content = resp.content
+        except httpx.HTTPError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"could not fetch {connector.endpoint_url}: {exc}") from exc
+    else:
+        try:
+            candidate = _resolve_local_data_path(connector.endpoint_url)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        if not candidate.is_file():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{connector.endpoint_url!r} was not found under the watched data folder")
+        filename = candidate.name
+        if candidate.suffix.lower() not in (".csv", ".json", ".xlsx", ".xlsm"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"path must end in .csv/.json/.xlsx (got {filename!r})")
+        content = candidate.read_bytes()
+
+    table_key = normalize_table_key(filename)
+    if table_key in KNOWN_TABLE_KEYS:
+        rows = rows_from_file(filename, content)
+        result = ingest_reference_rows(db, ctx.tenant_id, table_key, rows, source_label=f"connector:{connector.name}")
+        return _finish_ingest(db, ctx, connector, rows_queued=result.get("count", 0), lineage_id=result.get("lineage_id"), detail=result)
 
     try:
         readings = parse_telemetry_file(filename, content)
@@ -251,12 +405,4 @@ def ingest_connector(
     from reo_common.events import EventBus
 
     lineage_id = publish_readings(EventBus(), ctx.tenant_id, readings, lineage_id=f"connector:{connector.id}")
-
-    tenant = db.execute(select(Tenant).where(Tenant.id == ctx.tenant_id)).scalar_one_or_none()
-    if tenant is not None:
-        mark_started_if_idle(db, tenant, actor_id=ctx.user_id, actor_label=ctx.email, reason=f"connector:{connector.name}")
-
-    append_audit_event(db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
-                        event_type="connector.ingested", payload={"connector_id": connector.id, "rows_queued": len(readings)})
-    db.commit()
-    return ConnectorIngestResponse(lineage_id=lineage_id, rows_queued=len(readings))
+    return _finish_ingest(db, ctx, connector, rows_queued=len(readings), lineage_id=lineage_id, detail=None)

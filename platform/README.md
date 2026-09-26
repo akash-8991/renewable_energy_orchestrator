@@ -89,7 +89,9 @@ cd platform/infrastructure
 docker compose up -d --build
 ```
 
-This brings up: Postgres+TimescaleDB, Redis, MinIO, runs migrations, then starts `api`,
+This brings up: Postgres+TimescaleDB, Redis, MinIO, `source-db` (a plain Postgres pre-loaded with
+the reference dataset as real SQL tables — stands in for "a client's own database" for Connector
+Studio's `database` kind, see `docs/DEPLOYMENT.md` A9a), runs migrations, then starts `api`,
 `optimizer-worker`, `agent-worker`, `ot-gateway-sim`, `edge-simulator`, `export-worker`, `web`.
 
 Seed the reference demo tenant (5 solar farms, 3 wind farms, 2 BESS, 6 industrial consumers, one

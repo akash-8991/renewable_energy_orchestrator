@@ -55,28 +55,45 @@ documented limits rather than silent gaps:
   end: render → extract → persist → audit → apply → optimizer derate, confirmed against live DB
   data) and via unit tests; not verified against a real photographed document with real API calls.
 
-## Known tracked item: Connector Studio is a registration surface for five of six kinds
+## Known tracked item: Connector Studio is a registration surface for four of six kinds
 
 `GET/POST /connectors` (SSRF-hardened, vaulted credentials, maker-checker) categorises a
 connector's `kind` (`generic`/`market_energy_purchase`/`scada`/`iot`/`database`/`data_table`).
-Five of the six still only do what they always did: store config, run a reachability test, and
+Four of the six still only do what they always did: store config, run a reachability test, and
 gate activation. Grepping the codebase confirms nothing outside `routers/connectors.py` reads a
 `Connector` row for these kinds — `forecast.py`'s price series is a synthetic diurnal model, and
 `ot-gateway-sim` has no reference to `Connector` at all. Wiring a `market_energy_purchase`
-connector into `forecast.py`'s price forecast, an `iot` connector into replacing the
-edge-simulator's synthetic sensor feed, or a `scada` connector into `ot-gateway-sim`'s dispatch
-path are each a distinct, non-trivial feature (scheduled polling/caching, protocol-specific
-validation, and for SCADA a full safety review) — deliberately not attempted as a same-session
+connector into `forecast.py`'s price forecast, or an `iot` connector into replacing the
+edge-simulator's synthetic sensor feed, is each a distinct, non-trivial feature (scheduled
+polling/caching, protocol-specific validation) — deliberately not attempted as a same-session
 bolt-on, and **`scada` specifically never will be**: doc 05's non-negotiable architecture keeps
 OT command dispatch on the independent, safety-critical `ot-gateway-sim` path exclusively, so a
 user-registered SCADA connector deliberately has no route into real command execution regardless
 of its activation status, by design, not by omission.
 
-The sixth kind, `data_table`, is different: `POST /connectors/{id}/ingest` (an active connector
-only) fetches its `endpoint_url` and parses+publishes it as real telemetry, through the identical
-`parse_telemetry_file()`/`publish_readings()` path a CSV/JSON/XLSX file upload already goes
-through — this one is a genuine, working data path, not registration-only. See
-`PRODUCTION_READINESS_REVIEW.md` §4 item 2/8.
+The other two kinds are genuine, working data paths, not registration-only:
+
+- `data_table`: `POST /connectors/{id}/ingest` (an active connector only) fetches its
+  `endpoint_url` — an http(s) URL, *or* a path under the platform's watched local data folder
+  (`DATA_WATCH_DIR`, the same read-only mount the background folder-watcher scans) — and
+  parses+publishes it as real telemetry, through the identical `parse_telemetry_file()`/
+  `publish_readings()` path a CSV/JSON/XLSX file upload already goes through.
+- `database`: `endpoint_url` is instead a `postgresql://` connection string, egress-checked the
+  same way an HTTP endpoint is (`guardrails/ssrf.py`'s `check_outbound_host`) but restricted to an
+  explicit allow-list (currently just the reference `source-db` container — see
+  `infrastructure/docker-compose.yml` — a real deployment would let a tenant admin maintain this
+  list). `POST /connectors/{id}/ingest` with a `table_name` reflects that table via SQLAlchemy
+  (`backend/app/ingestion/db_source.py`, no raw SQL string interpolation of the table name) and
+  pulls its rows in.
+
+Either kind, when the file/table name matches one of the reference dataset's own 8 files
+(`backend/app/ingestion/hackathon_dataset.py`'s `KNOWN_TABLE_KEYS`), routes through that module's
+canonical Asset-telemetry/Customer mapping instead of the generic
+asset_id/metric/event_time/value/unit shape — the same mapping the standalone
+`ingest_portfolio_series()`/`ingest_customers()` script already used, now reachable from the UI
+too. `battery`/`scenario_actions` are recognized but still explicitly unmapped (reported as
+`status: "not_mapped"`, not silently ingesting nothing) — same documented gap as the standalone
+script. See `PRODUCTION_READINESS_REVIEW.md` §4 item 2/8.
 
 ## Portfolio-wide start/stop gate
 

@@ -111,7 +111,7 @@ cd infrastructure
 docker compose up -d --build
 ```
 
-First run pulls base images and builds 8 containers — expect 3–8 minutes depending on your
+First run pulls base images and builds 9 containers — expect 3–8 minutes depending on your
 connection. Watch progress with:
 
 ```bash
@@ -222,6 +222,47 @@ grid frequency, market price, weather — a few seconds), and ingests the 100 re
 customer accounts (~10-15s, since it aggregates 863,600 15-minute readings down to 9,000 daily
 rows on the way in). The customer data then shows up in the dashboard's **Customers** workspace
 (Customer Insights tab), filterable by type/region/customer ID.
+
+That's the one-shot manual script. To exercise the same mapping through the dashboard's own
+Connector Studio instead — e.g. to demo or test the two ways of connecting a data source — see A9a
+below; both routes are equivalent (same `hackathon_dataset.py` mapping underneath) and safe to run
+alongside or instead of the script above (everything's idempotent).
+
+### A9a. (optional) Test Connector Studio's two ingestion paths against the same dataset
+
+`infrastructure/docker-compose.yml` also brings up **`source-db`**, a plain Postgres container
+pre-loaded on first boot with the reference dataset's 8 CSVs as real SQL tables (see
+`infrastructure/source-db-init/`) — standing in for "a client's own database" so both of Connector
+Studio's real ingestion paths have something to point at. Since `../data/` is gitignored (a
+~100MB, user-provided dataset, never committed), `source-db` gracefully creates these 8 tables
+*empty* if that folder is missing or empty when it first boots (a fresh clone, or CI) — get the
+reference dataset into `platform/../data/` first, then recreate just this service's volume and
+reload it:
+
+```bash
+docker compose stop source-db && docker compose rm -f source-db
+docker volume rm reo_reo-source-db-data
+docker compose up -d source-db
+```
+
+1. **Folder path** — Connector Studio → *+ New connector* → kind **Data table (path/link)** → for
+   "Data path / link" enter a filename from the watched folder, e.g. `03_renewable_generation.csv`
+   (or any other file from the list in A9's table). Test it, activate it as a *different* user
+   (maker-checker), then **Ingest now**.
+2. **Database connection** — kind **Database** → connection string
+   `postgresql://reo_source:reo-source-secret@source-db:5432/client_export` → table name e.g.
+   `renewable_generation`, `grid`, `market`, `external_weather`, `customer_demographics`, or
+   `customer_energy_consumption_tariff`. Same test/activate/**Ingest now** flow.
+
+Either path recognizes these specific file/table names and routes them through the exact same
+canonical mapping A9's script uses (real Asset telemetry for the four portfolio-level series, real
+Customer/CustomerReading rows for the two retail-customer tables) — `battery`/`scenario_actions`
+are recognized but report `not_mapped` rather than silently ingesting nothing, matching A9's
+documented scope. Anything else (a file/table name Connector Studio doesn't recognize) falls back
+to the generic `asset_id`/`metric`/`event_time`/`value`/`unit` shape a file upload expects.
+`source-db` is only reachable by its docker-network name — a `database` connector pointed anywhere
+else is rejected by the same SSRF-style egress check an HTTP connector goes through (see
+`docs/SIMPLIFICATIONS.md`).
 
 ### A10. Stopping / cleaning up
 
