@@ -259,7 +259,11 @@ dashboard page (`manage:settings`/`manage:platform_config`, backed by a new tena
   of Keycloak's own `keycloak.v2` template with exactly one static brand panel `<div>` inserted,
   matching `Login.tsx`'s `.login-brand` copy/checklist/mark — no Keycloak login logic touched, only
   markup added around it) so the SSO redirect doesn't feel like a jump to a visually unrelated
-  product.
+  product. PatternFly's own base theme gives `.pf-v5-c-login__main` an independent white
+  background and drop-shadow on top of the outer card — left alone, the brand header and the form
+  rendered as two separately-elevated white boxes with a visible seam (worse on narrow screens,
+  where the header wraps to two lines). `reo.css` neutralizes that inner panel's own elevation so
+  the whole thing reads as the one card `Login.tsx` itself uses.
 - **`market_energy_purchase`/`iot` connector ingestion** — see the Connector Studio section above.
 
 This is deliberately still bounded by the same honesty standard as the rest of this document: the

@@ -82,6 +82,18 @@ body#keycloak-bg {
   max-width: 380px;
   width: 100%;
 }
+/* PatternFly's base theme gives .pf-v5-c-login__main its own independent
+   white background + a large drop-shadow (its "raised panel" look), on top
+   of the outer .pf-v5-c-login__container above — so the brand header and
+   the form rendered as two separately-elevated white boxes stacked with a
+   visible seam between them (worse at narrow widths, where the header
+   wraps to two lines). One card, matching Login.tsx's single .login-box,
+   means this inner panel must give up its own elevation entirely. */
+.pf-v5-c-login__main {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
 
 /* Same breakpoint as Login.tsx's own mobile rule — the brand panel drops
    off on narrow screens rather than squeezing both columns. */
