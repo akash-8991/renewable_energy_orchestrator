@@ -111,6 +111,13 @@ cd infrastructure
 docker compose up -d --build
 ```
 
+**Object storage: SeaweedFS, not MinIO.** This was MinIO until MinIO discontinued free
+distribution of its Docker images entirely (`minio/minio`/`minio/mc` on Docker Hub, and even the
+`dl.min.io` binary download server, all now return access-denied/410 — not a version bump, a full
+shutdown of their free channel). SeaweedFS's S3 gateway is a verified drop-in: the app code only
+ever does plain boto3 S3 calls (put/get object, presigned URLs), nothing MinIO-specific, so nothing
+above changes except the container running underneath `S3_ENDPOINT_URL`.
+
 First run pulls base images and builds 9 containers — expect 3–8 minutes depending on your
 connection. Watch progress with:
 
@@ -118,8 +125,8 @@ connection. Watch progress with:
 docker compose ps
 ```
 
-Wait until every row shows `Up` (and `healthy` for `postgres`/`redis`/`minio`). Then check the API
-directly:
+Wait until every row shows `Up` (and `healthy` for `postgres`/`redis`/`seaweedfs`/`source-db`). Then
+check the API directly:
 
 ```bash
 curl http://localhost:8000/health
@@ -186,7 +193,8 @@ can decide items in Approval Inbox — everyone else sees it read-only).
 Other useful local URLs:
 - API interactive docs: http://localhost:8000/docs
 - OT gateway simulator health: http://localhost:8010/health
-- MinIO console (object storage): http://localhost:9001 — login `reo-minio` / `reo-minio-secret`
+- SeaweedFS file browser (object storage): http://localhost:9001 (a plain file-tree view, not a
+  bucket-oriented console — see A5's "Object storage" note for why this isn't MinIO)
 
 ### A8. Run the test suite and the live demo script
 
@@ -281,6 +289,7 @@ docker compose down -v       # stop everything AND delete all data (fresh slate 
 | Dashboard loads but shows no data | Two possible causes: (1) Did you run step A6 (seed)? `docker compose run --rm api python /app/platform/database/seed.py` is safe to re-run — it no-ops if the tenant already exists. (2) Portfolio Operations shows an **idle** empty state by design until you connect a data source and click Start Optimizer (see A7 step 3) — this isn't a bug. |
 | Agents seem to give generic/templated answers | You're on the mock gateway — check `MODEL_PROVIDER=openrouter` and a real `OPENROUTER_API_KEY` are set in `infrastructure/.env`, then `docker compose up -d --build api agent-worker` to pick up the change. |
 | `pip install` fails on `psycopg2-binary` (Apple Silicon) | Install PostgreSQL client libs first: `brew install postgresql`, then retry. |
+| `docker compose up` fails to pull `minio/minio:latest` ("repository does not exist") | Your checkout predates the SeaweedFS switch (see A5) — `git pull` to get the current `infrastructure/docker-compose.yml`, which no longer references any MinIO image. |
 | Just did a full database wipe (`TRUNCATE ... CASCADE` or similar) and want a genuinely clean state | Reseed (`database/seed.py`) — that's it. `edge-simulator` re-checks the current tenant every ~10s tick and reloads its portfolio automatically when it changes (a fresh `Tenant` row means a new id); `api`/`optimizer-worker`/`agent-worker` already re-resolve the current tenant on every request/cycle, so nothing needs a manual restart. |
 
 ---

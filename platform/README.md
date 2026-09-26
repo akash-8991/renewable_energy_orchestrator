@@ -89,7 +89,9 @@ cd platform/infrastructure
 docker compose up -d --build
 ```
 
-This brings up: Postgres+TimescaleDB, Redis, MinIO, `source-db` (a plain Postgres pre-loaded with
+This brings up: Postgres+TimescaleDB, Redis, SeaweedFS (S3-compatible object storage — MinIO until
+MinIO discontinued free Docker image distribution entirely, see `docs/SIMPLIFICATIONS.md`),
+`source-db` (a plain Postgres pre-loaded with
 the reference dataset as real SQL tables — stands in for "a client's own database" for Connector
 Studio's `database` kind, see `docs/DEPLOYMENT.md` A9a), runs migrations, then starts `api`,
 `optimizer-worker`, `agent-worker`, `ot-gateway-sim`, `edge-simulator`, `export-worker`, `web`.
@@ -105,7 +107,7 @@ Then:
 - API: http://localhost:8000 (docs at `/docs`)
 - Dashboard: http://localhost:5173
 - OT gateway simulator: http://localhost:8010/health
-- MinIO console: http://localhost:9001 (`reo-minio` / `reo-minio-secret`)
+- SeaweedFS file browser (object storage): http://localhost:9001
 
 Demo login: tenant slug `demo-utility`, any seeded email (e.g. `tenant.admin@demo-utility.test`),
 password `Password123!` (local/demo only — see `database/seed.py`). For the full table of all 9

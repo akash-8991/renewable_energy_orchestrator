@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "reo",
+      "credentials": [
+        {"accessKey": "reo-minio", "secretKey": "reo-minio-secret"}
+      ],
+      "actions": ["Admin", "Read", "Write"]
+    }
+  ]
+}

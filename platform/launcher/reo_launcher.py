@@ -280,7 +280,7 @@ class LauncherApp:
         status.config(text=message, foreground="red", wraplength=560)
         ttk.Label(
             self.frame,
-            text="Docker Desktop is required to run the platform's Postgres, Redis, MinIO and "
+            text="Docker Desktop is required to run the platform's Postgres, Redis, object-storage and "
             "application containers. Install it, make sure it's running, then click Retry.",
             wraplength=560,
         ).pack(anchor="w", pady=10)

@@ -13,13 +13,16 @@ class Settings(BaseSettings):
     # Redis (stream bus + cache)
     redis_url: str = "redis://localhost:6379/0"
 
-    # Object storage (MinIO locally / S3 in AWS — same boto3 client)
+    # Object storage (SeaweedFS's S3 gateway locally / S3 in AWS — same boto3
+    # client either way; SeaweedFS replaced MinIO after MinIO discontinued
+    # free Docker image distribution entirely, see docs/SIMPLIFICATIONS.md)
     s3_endpoint_url: str | None = "http://localhost:9000"
     # Used only for generating presigned URLs handed to a browser/external
     # client. Inside docker-compose, `s3_endpoint_url` is the container-
-    # network hostname ("minio"), which a browser on the host can't reach —
-    # this is the host-reachable equivalent. Defaults to s3_endpoint_url
-    # when unset (e.g. real AWS S3, where the endpoint is already public).
+    # network hostname ("seaweedfs"), which a browser on the host can't
+    # reach — this is the host-reachable equivalent. Defaults to
+    # s3_endpoint_url when unset (e.g. real AWS S3, where the endpoint is
+    # already public).
     s3_public_endpoint_url: str | None = None
     s3_access_key: str = "reo-minio"
     s3_secret_key: str = "reo-minio-secret"

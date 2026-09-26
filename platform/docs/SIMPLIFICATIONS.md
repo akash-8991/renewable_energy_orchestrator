@@ -136,6 +136,33 @@ wasn't run this session so the bump could be verified properly (full re-test of 
 build) rather than shipped untested. Tracked here rather than silently ignored — bump both in a
 dedicated follow-up pass.
 
+## Object storage: SeaweedFS, not MinIO
+
+The local/demo stack's S3-compatible object store was MinIO until MinIO discontinued free
+distribution of its Docker images entirely — `minio/minio` and `minio/mc` on Docker Hub now return
+"repository does not exist" (access denied, not a 404 on a specific tag), and even their
+historically-free `dl.min.io` binary download server returns 410 Gone. This isn't a version-pin
+problem to route around; it's a full shutdown of MinIO's free distribution channel.
+
+Replaced with SeaweedFS's S3 gateway (`chrislusf/seaweedfs:4.22`, still freely pullable —
+verified), which is a genuine drop-in here: every S3 call the app code makes (`quarantine.py`,
+`routers/exports.py`, `export-worker/worker.py`) is a plain boto3 call —
+`put_object`/`get_object`/`generate_presigned_url` — nothing MinIO-specific (no admin API, no
+MinIO SDK). Verified against the actual running app, not just in isolation: triggered a real
+evidence-pack export end-to-end (`export-worker` uploads via `put_object`, `GET /exports/{id}`
+returns a presigned URL, downloaded the file over plain HTTP) and confirmed unauthenticated
+requests are still correctly rejected (403).
+
+What's different: bucket creation moved from `mc mb` (`minio-init`) to a small boto3 script
+(`infrastructure/seaweedfs-init/bootstrap_buckets.py`, run as `seaweedfs-init` reusing the `api`
+image the same way `migrate` reuses it for Alembic) that's idempotent the same way — catches
+`BucketAlreadyOwnedByYou`/`BucketAlreadyExists` rather than erroring on a re-run. Credentials live
+in a mounted `s3.json` identity file (`infrastructure/seaweedfs-init/s3.json`) instead of
+`MINIO_ROOT_USER`/`PASSWORD` env vars, but the actual key/secret values (`S3_ACCESS_KEY`/
+`S3_SECRET_KEY`) are unchanged, so no `.env` migration is needed. MinIO's bucket-oriented web
+console (port 9001) has no equivalent here — SeaweedFS's filer serves a plain hierarchical
+file-tree browser on the same port instead, which is what `docs/DEPLOYMENT.md` now links to.
+
 ## What is *not* simplified
 
 Built with real logic end to end, calling live services where configured: ingestion (file/DB/
