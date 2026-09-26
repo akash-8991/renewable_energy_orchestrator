@@ -16,21 +16,78 @@
 }
 
 body#keycloak-bg {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #172554 100%) !important;
+  background: var(--reo-bg) !important;
   font-family: var(--reo-font) !important;
+  display: flex;
+  min-height: 100vh;
+  margin: 0;
 }
 
-/* The stock theme centers a single card; that maps directly onto the
-   dashboard's own .login-box (a centered white card over a colored page
-   background) even without reproducing its two-column brand panel, which
-   would need a template rewrite rather than a CSS-only override. */
+/* Matches Login.tsx's .login-brand exactly (copy, checklist, brand mark) —
+   see template.ftl for the one inserted div this styles. Login.tsx's own
+   two-column split (.login-screen { display: flex }) is reproduced here on
+   <body> directly, since body already wraps both this panel and Keycloak's
+   own .pf-v5-c-login container as siblings. */
+.reo-brand-panel {
+  flex: 1 1 46%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 64px;
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #172554 100%);
+}
+.reo-brand-panel::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.14), transparent 55%);
+  pointer-events: none;
+}
+.reo-brand-mark {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 28px;
+}
+.reo-brand-panel h1 { position: relative; font-size: 28px; line-height: 1.25; margin: 0 0 14px; font-weight: 700; letter-spacing: -0.01em; color: #fff; }
+.reo-brand-panel p { position: relative; font-size: 15px; color: rgba(255, 255, 255, 0.8); max-width: 380px; line-height: 1.6; margin: 0 0 32px; }
+.reo-brand-features { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.reo-brand-features li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: rgba(255, 255, 255, 0.88); }
+.reo-brand-features li::before { content: "\2713"; flex-shrink: 0; font-weight: 700; color: #fff; }
+
+/* Keycloak's own login container becomes the right-hand panel, matching
+   Login.tsx's .login-panel (centers the card in the remaining space). */
+.pf-v5-c-login {
+  flex: 1 1 54%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
 .pf-v5-c-login__container {
   background: #ffffff;
   border: 1px solid var(--reo-border);
   border-radius: var(--reo-radius);
   box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
   padding: 8px;
-  max-width: 420px;
+  max-width: 380px;
+  width: 100%;
+}
+
+/* Same breakpoint as Login.tsx's own mobile rule — the brand panel drops
+   off on narrow screens rather than squeezing both columns. */
+@media (max-width: 860px) {
+  .reo-brand-panel { display: none; }
+  .pf-v5-c-login { padding: 32px 24px; }
 }
 
 .pf-v5-c-login__header {

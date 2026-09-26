@@ -253,10 +253,13 @@ dashboard page (`manage:settings`/`manage:platform_config`, backed by a new tena
   good one). Auto-provisions a local `User` row (linking by email if one already exists) on first
   SSO login. Per-tenant opt-in (`PlatformSettings.sso_enabled`) since not every tenant necessarily
   federates with the same IdP. Verified live end-to-end via the actual browser flow, not just unit
-  tests. Its login page is reskinned to match the dashboard's own login screen
-  (`infrastructure/keycloak-theme/reo` — a CSS-only Keycloak theme override: same brand gradient,
-  card styling, button/input treatment and font stack, none of Keycloak's actual login logic
-  touched) so the SSO redirect doesn't feel like a jump to a visually unrelated product.
+  tests. Its login page is reskinned to match the dashboard's own login screen's full two-column
+  layout — not just its colors (`infrastructure/keycloak-theme/reo`: `resources/css/reo.css` for
+  the palette/card/button/input styling, plus one `template.ftl` override that is a verbatim copy
+  of Keycloak's own `keycloak.v2` template with exactly one static brand panel `<div>` inserted,
+  matching `Login.tsx`'s `.login-brand` copy/checklist/mark — no Keycloak login logic touched, only
+  markup added around it) so the SSO redirect doesn't feel like a jump to a visually unrelated
+  product.
 - **`market_energy_purchase`/`iot` connector ingestion** — see the Connector Studio section above.
 
 This is deliberately still bounded by the same honesty standard as the rest of this document: the

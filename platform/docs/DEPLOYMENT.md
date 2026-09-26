@@ -204,8 +204,9 @@ env-var-only (`manage:settings`/`manage:platform_config`, so `tenant.admin`/`pla
 provider, not a mock — pre-loaded with a "reo" realm, a "reo-platform" client, and one demo user
 (`sso.demo` / `Password123!`) from `infrastructure/keycloak-init/realm-export.json`, and its own
 login page reskinned (`infrastructure/keycloak-theme/reo`) to match the dashboard's own login
-screen — same brand gradient, card style, colors and fonts — so it doesn't feel like a jump to an
-unrelated product mid-flow. To try it:
+screen's full two-column layout — the same branded left panel (logo, description, checklist) and
+right-hand form card, not just matching colors — so it doesn't feel like a jump to an unrelated
+product mid-flow. To try it:
 
 1. In Configuration Studio, enable **SSO** for the `demo-utility` tenant (any user with
    `manage:settings` can do this — a first-time login enables it via the API too:
