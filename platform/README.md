@@ -10,7 +10,10 @@ See `docs/ARCHITECTURE.md` for the build-to-spec traceability map, `docs/SIMPLIF
 every deliberate scope decision made to build this without a real client engagement, and
 `docs/PRODUCTION_READINESS_REVIEW.md` for a direct answer on deployment readiness. For full
 click-by-click steps to run this locally or actually stand it up on AWS (or another cloud), see
-**`docs/DEPLOYMENT.md`** — the quickstart below is the condensed version.
+**`docs/DEPLOYMENT.md`** — the quickstart below is the condensed version. Once it's running, see
+**`docs/USAGE_GUIDE.md`** for the operator runbook: logging in, creating users, connecting a
+backend database/weather feed/market-data site/IoT source, LLM provider and SSO setup, RBAC roles,
+and exactly what the battery-charging/SCADA control question does and doesn't cover today.
 
 ## Repository layout
 
@@ -51,7 +54,7 @@ platform/
 │                      vendor-neutral LLM model gateway, the Redis event bus, JWT/RBAC auth,
 │                      the secrets vault, digital-twin freshness helpers.
 ├── docs/                Architecture traceability, deliberate simplifications, production
-│                      readiness review, demo script.
+│                      readiness review, demo script, and the post-deployment USAGE_GUIDE.md.
 ├── launcher/            reo_launcher.py — the stdlib-only Tk app packaged into REO-Launcher.exe
 │                      (see docs/DEPLOYMENT.md Part 0) that gets a Windows machine with only
 │                      Docker Desktop from "double-click" to a running dashboard.

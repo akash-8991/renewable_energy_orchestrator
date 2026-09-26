@@ -9,6 +9,11 @@ that section before you start). **Part C** notes what changes on another cloud.
 Every command below is written to be copy-pasted as-is from `platform/` unless a step says
 otherwise.
 
+**This guide gets the platform running.** Once it's up, switch to **`docs/USAGE_GUIDE.md`** for the
+operator runbook — logging in, creating users/tenants, connecting a real backend database, weather
+feed, market-data site, IoT source, LLM provider and SSO setup, RBAC roles, and (read this one) what
+the battery-charging/renewable-optimization SCADA control question does and doesn't cover today.
+
 ---
 
 ## Part 0 — One-click Windows launcher (no terminal, no `git clone`)
@@ -213,6 +218,10 @@ Keycloak's admin console is at `http://localhost:8081` (`admin`/`admin`) if you 
 extend the realm — e.g. add a user whose email matches a seeded platform account (like
 `tenant.admin@demo-utility.test`) to test SSO login *linking into* an existing, more privileged
 account rather than provisioning a new viewer.
+
+**The platform is up.** For everything past this point — connecting a real backend database,
+weather feed, market-data site, IoT source, or SCADA system, creating additional users/tenants, and
+configuring the LLM provider — see **`docs/USAGE_GUIDE.md`**.
 
 #### Demo accounts (one per role)
 
