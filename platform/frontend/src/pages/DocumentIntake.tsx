@@ -152,7 +152,11 @@ export default function DocumentIntake() {
         try {
           if (TABLE_SUFFIXES.includes(suffix)) {
             const { data } = await api.post("/ingestion/files", form, { headers: { "Content-Type": "multipart/form-data" } });
-            outcomes.push({ filename: file.name, status: "ok", message: `${data.rows_queued} reading(s) queued` });
+            const detail = data.detail;
+            const message = detail && detail.status !== "ingested"
+              ? (detail.message || `${detail.table}: ${detail.status}`)
+              : `${data.rows_queued} row(s)/reading(s) processed${detail?.table ? ` for ${detail.table}` : ""}`;
+            outcomes.push({ filename: file.name, status: "ok", message });
           } else if (DOCUMENT_SUFFIXES.includes(suffix)) {
             const { data } = await api.post("/ingestion/documents", form, { headers: { "Content-Type": "multipart/form-data" } });
             outcomes.push({ filename: file.name, status: "ok", message: `extracted as ${data.document_type}` });

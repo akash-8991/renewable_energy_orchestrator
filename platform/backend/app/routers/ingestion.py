@@ -6,24 +6,38 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from output.audit import append_audit_event
 from reo_common.events import EventBus
 from reo_common.model_gateway import GatewayError, get_model_gateway
-from models.canonical import Asset, Constraint, DocumentIntake, Tenant
-from evaluation.observability import persist_call_record
 from reo_common.security import AuthContext
 from sqlalchemy import select
 from sqlalchemy.exc import DataError
 from sqlalchemy.orm import Session
 
+from evaluation.observability import persist_call_record
+from models.canonical import Asset, Constraint, DocumentIntake, Tenant
+from output.audit import append_audit_event
+
 from ..deps import db_session, require_permission
 from ..ingestion.document_ingest import (
     SUPPORTED_SUFFIXES as DOCUMENT_SUFFIXES,
+)
+from ..ingestion.document_ingest import (
     extract_document,
-    file_checksum as document_checksum,
     render_pages,
 )
-from ..ingestion.file_ingest import parse_telemetry_file, publish_readings
+from ..ingestion.document_ingest import (
+    file_checksum as document_checksum,
+)
+from ..ingestion.file_ingest import (
+    parse_telemetry_file,
+    publish_readings,
+    rows_from_file,
+)
+from ..ingestion.hackathon_dataset import (
+    KNOWN_TABLE_KEYS,
+    ingest_reference_rows,
+    normalize_table_key,
+)
 from .operations import mark_started_if_idle
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
@@ -40,9 +54,10 @@ def _get_bus() -> EventBus:
 
 
 class FileIngestResponse(BaseModel):
-    lineage_id: str
+    lineage_id: str | None = None
     rows_queued: int
     filename: str
+    detail: dict | None = None  # set when the filename matched a recognized reference-dataset table
 
 
 @router.post("/files", response_model=FileIngestResponse)
@@ -50,24 +65,43 @@ async def upload_telemetry_file(
     file: UploadFile, ctx: AuthContext = Depends(require_permission("ingest:files")), db: Session = Depends(db_session)
 ) -> FileIngestResponse:
     content = await file.read()
-    if len(content) > 25 * 1024 * 1024:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file exceeds 25MB limit")
-    try:
-        readings = parse_telemetry_file(file.filename or "upload", content)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file exceeds 100MB limit")
+    filename = file.filename or "upload"
 
-    if not readings:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "no valid rows found (expected columns: asset_id, metric, event_time, value, unit)")
-
-    lineage_id = publish_readings(_get_bus(), ctx.tenant_id, readings)
+    # A filename matching one of the reference dataset's own 8 files (e.g.
+    # 01_customer_demographics.csv) routes through the same canonical
+    # Asset-telemetry/Customer mapping Connector Studio's data_table/database
+    # ingestion uses (backend/app/routers/connectors.py) instead of the
+    # generic asset_id/metric/event_time/value/unit shape below, which none
+    # of those 8 files are actually shaped like.
+    table_key = normalize_table_key(filename)
+    if table_key in KNOWN_TABLE_KEYS:
+        try:
+            rows = rows_from_file(filename, content)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        result = ingest_reference_rows(db, ctx.tenant_id, table_key, rows, source_label=f"file:{filename}")
+        rows_queued = result.get("count", 0)
+        lineage_id = result.get("lineage_id")
+        detail = result
+    else:
+        try:
+            readings = parse_telemetry_file(filename, content)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        if not readings:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "no valid rows found (expected columns: asset_id, metric, event_time, value, unit)")
+        lineage_id = publish_readings(_get_bus(), ctx.tenant_id, readings)
+        rows_queued = len(readings)
+        detail = None
 
     tenant = db.execute(select(Tenant).where(Tenant.id == ctx.tenant_id)).scalar_one_or_none()
-    if tenant is not None:
-        mark_started_if_idle(db, tenant, actor_id=ctx.user_id, actor_label=ctx.email, reason=f"file:{file.filename}")
-        db.commit()
+    if tenant is not None and rows_queued:
+        mark_started_if_idle(db, tenant, actor_id=ctx.user_id, actor_label=ctx.email, reason=f"file:{filename}")
+    db.commit()
 
-    return FileIngestResponse(lineage_id=lineage_id, rows_queued=len(readings), filename=file.filename or "upload")
+    return FileIngestResponse(lineage_id=lineage_id, rows_queued=rows_queued, filename=filename, detail=detail)
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +127,7 @@ class DocumentIntakeResponse(BaseModel):
     created_at: str
 
     @classmethod
-    def from_row(cls, row: DocumentIntake) -> "DocumentIntakeResponse":
+    def from_row(cls, row: DocumentIntake) -> DocumentIntakeResponse:
         return cls(
             id=row.id, filename=row.filename, document_type=row.document_type, summary=row.summary,
             affected_asset_refs=row.affected_asset_refs, effective_from=row.effective_from.isoformat() if row.effective_from else None,

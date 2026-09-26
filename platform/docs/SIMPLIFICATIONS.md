@@ -91,7 +91,12 @@ Either kind, when the file/table name matches one of the reference dataset's own
 canonical Asset-telemetry/Customer mapping instead of the generic
 asset_id/metric/event_time/value/unit shape — the same mapping the standalone
 `ingest_portfolio_series()`/`ingest_customers()` script already used, now reachable from the UI
-too. `battery`/`scenario_actions` are recognized but still explicitly unmapped (reported as
+too. Document Intake's own file upload (`POST /ingestion/files`) recognizes the same 8 filenames
+the same way, so dropping e.g. `01_customer_demographics.csv` there works too, not just through a
+connector — previously it 400'd with "no valid rows found", since it only ever knew the generic
+shape (also raised that endpoint's size cap from 25MB to 100MB, since
+`02_customer_energy_consumption_tariff.csv` alone is 76MB). `battery`/`scenario_actions` are
+recognized but still explicitly unmapped (reported as
 `status: "not_mapped"`, not silently ingesting nothing) — same documented gap as the standalone
 script. See `PRODUCTION_READINESS_REVIEW.md` §4 item 2/8.
 
