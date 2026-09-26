@@ -1,0 +1,101 @@
+/* Matches frontend/src/styles.css's .login-* rules and :root color
+   variables as closely as a CSS-only Keycloak theme override can — same
+   brand gradient, card styling, button/input treatment and font stack as
+   the platform's own login screen. Keep these two files in sync if the
+   dashboard's login page is ever restyled. */
+
+:root {
+  --reo-bg: #f4f6f9;
+  --reo-border: #e1e5ec;
+  --reo-text: #1c2433;
+  --reo-text-dim: #667085;
+  --reo-accent: #2563eb;
+  --reo-accent-dim: #e8eefd;
+  --reo-radius: 10px;
+  --reo-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body#keycloak-bg {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #172554 100%) !important;
+  font-family: var(--reo-font) !important;
+}
+
+/* The stock theme centers a single card; that maps directly onto the
+   dashboard's own .login-box (a centered white card over a colored page
+   background) even without reproducing its two-column brand panel, which
+   would need a template rewrite rather than a CSS-only override. */
+.pf-v5-c-login__container {
+  background: #ffffff;
+  border: 1px solid var(--reo-border);
+  border-radius: var(--reo-radius);
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.06);
+  padding: 8px;
+  max-width: 420px;
+}
+
+.pf-v5-c-login__header {
+  padding-bottom: 8px;
+}
+#kc-header-wrapper.pf-v5-c-brand {
+  /* The base theme sets this element's color !important (it's designed to
+     read as white against the PatternFly banner it normally sits on) — the
+     same weight is needed here to actually win, since our header now sits
+     on the white card background instead. */
+  color: var(--reo-accent) !important;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  background-image: none;
+}
+
+.pf-v5-c-login__main-header .pf-v5-c-title {
+  font-family: var(--reo-font);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--reo-text);
+}
+
+.pf-v5-c-form__label-text {
+  font-size: 12px;
+  color: var(--reo-text-dim);
+  font-weight: 400;
+  text-transform: none;
+}
+
+.pf-v5-c-form-control,
+.pf-v5-c-form-control input,
+input#username,
+input#password {
+  background: #ffffff !important;
+  border: 1px solid var(--reo-border) !important;
+  border-radius: 7px !important;
+  color: var(--reo-text) !important;
+  font-family: var(--reo-font) !important;
+  font-size: 13px !important;
+  box-shadow: none !important;
+}
+.pf-v5-c-form-control:focus-within,
+input#username:focus,
+input#password:focus {
+  outline: none !important;
+  border-color: var(--reo-accent) !important;
+  box-shadow: 0 0 0 3px var(--reo-accent-dim) !important;
+}
+
+.pf-v5-c-button.pf-m-primary {
+  background: var(--reo-accent) !important;
+  border-color: transparent !important;
+  border-radius: 7px !important;
+  font-family: var(--reo-font) !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+}
+.pf-v5-c-button.pf-m-primary:hover {
+  filter: brightness(1.08);
+}
+
+a,
+a:visited {
+  color: var(--reo-accent);
+}

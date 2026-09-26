@@ -400,7 +400,9 @@ provider wants a higher timeout and a higher failure threshold than a flaky one.
 
 **Local/demo**: `docker compose up` already brings up a real, spec-compliant Keycloak container
 pre-loaded with a "reo" realm, a "reo-platform" client, and a demo user (`sso.demo` /
-`Password123!`). Enable it per tenant and try it:
+`Password123!`) — its login page is reskinned (`infrastructure/keycloak-theme/reo`) to match the
+dashboard's own login screen, so the redirect doesn't feel like leaving the product. Enable it per
+tenant and try it:
 
 ```bash
 curl -X PUT http://localhost:8000/configuration/settings \

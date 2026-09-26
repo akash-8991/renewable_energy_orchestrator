@@ -202,14 +202,17 @@ env-var-only (`manage:settings`/`manage:platform_config`, so `tenant.admin`/`pla
 
 `docker compose up` also brings up a **Keycloak** container — a real, spec-compliant OIDC identity
 provider, not a mock — pre-loaded with a "reo" realm, a "reo-platform" client, and one demo user
-(`sso.demo` / `Password123!`) from `infrastructure/keycloak-init/realm-export.json`. To try it:
+(`sso.demo` / `Password123!`) from `infrastructure/keycloak-init/realm-export.json`, and its own
+login page reskinned (`infrastructure/keycloak-theme/reo`) to match the dashboard's own login
+screen — same brand gradient, card style, colors and fonts — so it doesn't feel like a jump to an
+unrelated product mid-flow. To try it:
 
 1. In Configuration Studio, enable **SSO** for the `demo-utility` tenant (any user with
    `manage:settings` can do this — a first-time login enables it via the API too:
    `curl -X PUT http://localhost:8000/configuration/settings -H "Authorization: Bearer $TOKEN" -d
    '{"sso_enabled": true}'`).
 2. On the login screen, enter the tenant slug and click **Log in with SSO** — you're redirected to
-   Keycloak's own real login page (`http://localhost:8081/realms/reo/...`).
+   Keycloak's own real login page (`http://localhost:8081/realms/reo/...`), styled to match.
 3. Sign in as `sso.demo` / `Password123!`. Keycloak redirects back to `/auth/sso/callback`, which
    exchanges the code for tokens, verifies the `id_token`'s signature against Keycloak's own
    published JWKS, and issues this platform's own JWT — landing you back on Portfolio Operations,

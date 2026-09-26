@@ -154,7 +154,13 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
     ports: ["127.0.0.1:8081:8080"]  # host-reachable — the browser is redirected here to log in
-    volumes: ["./keycloak-init:/opt/keycloak/data/import:ro"]
+    volumes:
+      - ./keycloak-init:/opt/keycloak/data/import:ro
+      # Reskins the login page to match the dashboard's own (see the "reo"
+      # theme's own comments) — activated per-realm via realm-export.json's
+      # loginTheme, not a Keycloak-wide default, so it only ever affects
+      # this platform's own realm.
+      - ./keycloak-theme/reo:/opt/keycloak/themes/reo:ro
 
   optimizer-worker:
     build: { context: ../.., dockerfile: platform/policy/Dockerfile }

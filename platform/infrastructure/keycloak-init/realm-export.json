@@ -3,6 +3,9 @@
   "enabled": true,
   "sslRequired": "none",
   "registrationAllowed": false,
+  "displayName": "Renewable Energy Orchestrator",
+  "displayNameHtml": "&#9889; Renewable Energy Orchestrator",
+  "loginTheme": "reo",
   "clients": [
     {
       "clientId": "reo-platform",
