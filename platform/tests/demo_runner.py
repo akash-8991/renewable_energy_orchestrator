@@ -136,9 +136,19 @@ def run(base_url: str) -> int:
     with demo.step(3, "Wind surge + price spike -> charge/sell trade-off") as d:
         headers = d.as_user("portfolio.manager@demo-utility.test")
         d.client.put("/simulation/scenario", json={"cloud_cover": 0, "wind_surge": 2.2, "price_spike": 2.5, "battery_outage_asset": "", "line_congestion": False, "demand_shock": 1}, headers=headers)
-        wait_for_tick()
-        after = d.client.get("/twin/portfolio", headers=headers).json()
-        wind_after = _sum_metric(after, "wind", "power_kw")
+        # wind_surge scales each turbine's *instantaneous* reported speed, not
+        # the underlying WindState random walk, so a turbine whose walk has
+        # drifted below the ~3 m/s cut-in can still read 0kW for a tick or
+        # two even at a large surge — poll across several ticks instead of
+        # trusting the first one (portfolio-wide sum only needs one turbine
+        # over cut-in).
+        wind_after = 0.0
+        for _ in range(8):
+            wait_for_tick()
+            after = d.client.get("/twin/portfolio", headers=headers).json()
+            wind_after = _sum_metric(after, "wind", "power_kw")
+            if wind_after > 0:
+                break
         d.check(wind_after > 0, f"wind output responded to surge: {wind_after:.0f}kW")
         d.client.post("/simulation/scenario/reset", headers=headers)
 

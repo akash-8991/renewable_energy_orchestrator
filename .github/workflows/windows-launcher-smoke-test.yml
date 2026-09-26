@@ -1,13 +1,24 @@
 name: Windows launcher smoke test
 
-# Manual-only: exercises reo_launcher.py's core functions (download/extract
-# the real platform source from GitHub, write infrastructure/.env, detect
-# Docker, run a subprocess via CREATE_NO_WINDOW) on a real windows-latest
-# runner — the one thing that can only be verified on actual Windows, not
-# simulated on macOS/Linux. Does NOT bring up the real docker-compose stack:
-# see windows-docker-probe.yml — this platform's images are all Linux-based
-# and the hosted windows-latest runner only supports Windows containers.
+# Exercises reo_launcher.py's core functions (download/extract the real
+# platform source from GitHub, write infrastructure/.env, detect Docker, run
+# a subprocess via CREATE_NO_WINDOW) on a real windows-latest runner — the
+# one thing that can only be verified on actual Windows, not simulated on
+# macOS/Linux. Runs on every change to the launcher, same trigger as
+# build-launcher.yml.
+#
+# Does NOT bring up the real docker-compose stack: verified separately
+# (workflow_dispatch run 36223309319, since removed) that windows-latest
+# hosted runners only support Windows containers, not Linux — this
+# platform's images are all Linux-based, so that gap is a CI-environment
+# limit, not something this test can or should route around. A real user's
+# Docker Desktop defaults to Linux containers via WSL2, unlike this runner.
 on:
+  push:
+    branches: [master]
+    paths:
+      - "platform/launcher/**"
+      - ".github/workflows/windows-launcher-smoke-test.yml"
   workflow_dispatch: {}
 
 jobs:

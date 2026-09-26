@@ -58,14 +58,31 @@ def solar_diurnal_factor(hour: float) -> float:
     return max(0.0, math.sin(math.pi * (hour - 6) / 14)) ** 1.5
 
 
+NOMINAL_WIND_SPEED_MS = 7.0  # matches _reset_asset_state's initial random.uniform(5, 9) midpoint
+
+
 @dataclass
 class WindState:
     speed_ms: float = 7.0
 
     def step(self, surge_multiplier: float) -> float:
-        self.speed_ms += random.gauss(0, 0.6)
+        # A real "surge" scenario represents a sustained change in wind
+        # conditions, not a one-tick display multiplier — the previous
+        # version only scaled the *returned* value while leaving speed_ms's
+        # own random walk untouched, so a turbine whose walk had drifted
+        # near zero stayed near zero (e.g. 0.4 m/s * 2.2 surge = 0.9 m/s,
+        # still well under the 3 m/s cut-in) regardless of how large the
+        # surge multiplier was, and never recovered on its own. Reverting
+        # speed_ms itself toward a surge-scaled target — rather than
+        # multiplying the current (possibly near-zero) value — guarantees
+        # convergence above cut-in within a couple of ticks from any
+        # starting point, and is reset-safe: dropping surge_multiplier back
+        # to 1.0 reverts the target back to NOMINAL_WIND_SPEED_MS instead of
+        # leaving speed_ms permanently inflated.
+        target = NOMINAL_WIND_SPEED_MS * surge_multiplier
+        self.speed_ms += random.gauss(0, 0.6) + 0.15 * (target - self.speed_ms)
         self.speed_ms = max(0.0, min(28.0, self.speed_ms))
-        return self.speed_ms * surge_multiplier
+        return self.speed_ms
 
 
 def wind_power_factor(speed_ms: float) -> float:
