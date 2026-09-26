@@ -32,8 +32,10 @@ What it does, in order:
 5. Opens the dashboard at http://localhost:5173 in your default browser and shows the demo login
    from A7's table.
 
-Re-running the launcher later reuses the already-downloaded source and the already-built images —
-it just brings the stack back up. A "Stop platform" button in the launcher's final screen runs
+Re-running the launcher later re-fetches the latest source from GitHub every time (cheap — a few
+MB — and means a fix pushed upstream reaches you on your next launch instead of being stuck behind
+a stale local copy) but reuses the already-built Docker images, so only a genuine code change
+triggers a rebuild. A "Stop platform" button in the launcher's final screen runs
 `docker compose down` when you're done. Everything past this point (A1–A10, B, C) is the
 command-line path the launcher automates — read on if you want to run it by hand, customize it, or
 you're not on Windows.

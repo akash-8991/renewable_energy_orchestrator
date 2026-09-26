@@ -95,10 +95,6 @@ def infra_dir() -> Path:
     return platform_dir() / "infrastructure"
 
 
-def source_already_present() -> bool:
-    return (infra_dir() / "docker-compose.yml").exists()
-
-
 def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         cmd,
@@ -386,11 +382,14 @@ class LauncherApp:
 
     def _provision_worker(self, provider: str, api_key: str | None, model: str | None) -> None:
         try:
-            if not source_already_present():
-                self._set_status("Downloading platform source (first run only)...")
-                download_and_extract_source(self._log)
-            else:
-                self._log(f"Using previously downloaded source at {repo_root()}")
+            # Always re-fetches (not just on the very first run): this project is
+            # actively evolving, and a stale locally-cached copy has already once
+            # meant a real, already-pushed fix (e.g. a broken Docker image
+            # reference) couldn't reach someone who'd already run the launcher
+            # before — re-downloading a ~2MB source tree every launch is cheap
+            # insurance against that, worth it over saving a few seconds.
+            self._set_status("Downloading the latest platform source...")
+            download_and_extract_source(self._log)
 
             self._set_status("Writing configuration...")
             write_env_file(provider, api_key, model)
