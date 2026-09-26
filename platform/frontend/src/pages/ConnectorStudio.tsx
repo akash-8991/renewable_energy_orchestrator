@@ -11,20 +11,22 @@ interface Connector {
 
 const KIND_OPTIONS = [
   { value: "generic", label: "Generic API", help: "Any external REST endpoint — an ERP/CRM webhook, a notification service, a custom integration." },
-  { value: "market_energy_purchase", label: "Market energy purchase API", help: "A power exchange/aggregator's price or trading API, for agents to act on. Registers and reachability-tests the endpoint — it is not yet wired to replace the optimizer's synthetic price forecast (see ARCHITECTURE.md)." },
+  { value: "market_energy_purchase", label: "Market energy purchase API", help: "A power exchange/aggregator's price API. Once active, \"Ingest now\" fetches a JSON array (or {\"prices\": [...]}) of {timestamp, price_per_mwh} and writes it as a real price forecast, taking over from the synthetic price curve for whatever it covers. Does not unlock Start Optimizer on its own — only a database/data_table connector does that." },
   { value: "scada", label: "SCADA API", help: "An external SCADA/OPC-UA gateway. Registers and reachability-tests the endpoint — live OT dispatch always goes through the separate, safety-critical ot-gateway-sim path, never a registered connector, regardless of activation status." },
-  { value: "iot", label: "IoT API", help: "A device/sensor platform (smart meters, edge gateways). Registers and reachability-tests the endpoint — not yet wired to replace the edge-simulator's synthetic telemetry." },
+  { value: "iot", label: "IoT API", help: "A device/sensor platform (smart meters, edge gateways). Once active, \"Ingest now\" fetches its JSON in the generic asset_id/metric/event_time/value/unit shape and publishes it as real telemetry — the same path a file upload uses. Does not unlock Start Optimizer on its own." },
   { value: "database", label: "Database", help: "A Postgres connection string (postgresql://user:pass@host:port/db) — e.g. the bundled reference source-db: postgresql://reo_source:reo-source-secret@source-db:5432/client_export. Once active, set a table name and \"Ingest now\" connects and pulls that table in, through the same reference-dataset mapping data_table ingestion uses below." },
   { value: "data_table", label: "Data table (path/link)", help: "A CSV/JSON/XLSX URL, or a filename from the platform's watched data folder (e.g. 03_renewable_generation.csv). A recognized reference-dataset filename is mapped onto real telemetry/customers automatically; anything else is expected in the generic asset_id/metric/event_time/value/unit shape." },
 ];
 
 // Matches backend/app/routers/operations.py's has_data_source check exactly:
-// only an active database or data_table connector counts — the other four
-// kinds are for agents to act *out* on the world once a decision is made,
-// not for bringing data in, so they deliberately don't gate Start Optimizer
-// (by explicit request), and neither does a Document Intake upload on its
-// own — see operations.py's module docstring.
+// only an active database or data_table connector counts — market_energy_
+// purchase/iot connectors ingest real data too (see the Ingest-now button
+// below) but neither they nor a Document Intake upload unlock Start
+// Optimizer on their own, by explicit request — see operations.py's module
+// docstring. scada never ingests anything; OT dispatch stays exclusively
+// on ot-gateway-sim regardless of a connector's activation status.
 const DATA_INGESTION_KINDS = ["database", "data_table"];
+const INGESTABLE_KINDS = ["database", "data_table", "market_energy_purchase", "iot"];
 
 export default function ConnectorStudio() {
   const qc = useQueryClient();
@@ -192,7 +194,7 @@ export default function ConnectorStudio() {
                   {c.status !== "active" && c.status !== "disabled" && (
                     <button onClick={() => activate.mutate(c.id)} disabled={activate.isPending}>Activate</button>
                   )}
-                  {(c.kind === "data_table" || c.kind === "database") && c.status === "active" && (
+                  {INGESTABLE_KINDS.includes(c.kind) && c.status === "active" && (
                     <button onClick={() => ingest.mutate(c.id)} disabled={ingest.isPending}>
                       {ingest.isPending ? "Ingesting..." : "Ingest now"}
                     </button>

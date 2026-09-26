@@ -28,6 +28,7 @@ from evaluation.eval_harness import run_eval_suite
 from database.connection import SessionLocal, break_glass_cross_tenant
 from reo_common.events import CloudEvent, EventBus, STREAM_DASHBOARD_FANOUT, STREAM_DECISION_READY, STREAM_EVAL_REQUEST
 from reo_common.model_gateway import get_model_gateway
+from reo_common.platform_settings import attach_circuit_breaker
 from models.canonical import AgentEvalRun, Decision
 from evaluation.observability import persist_call_record
 from sqlalchemy import select
@@ -64,6 +65,7 @@ def run_agents_for_decision(decision_id: str) -> None:
                 return
             tenant_id = decision.tenant_id
             correlation_id = decision.decision_cycle_id
+            attach_circuit_breaker(gateway, db, tenant_id)
 
             bundle = build_evidence_bundle(db, tenant_id, decision)
 
@@ -124,6 +126,8 @@ def run_eval_request(tenant_id: str | None, triggered_by: str | None) -> None:
     gateway.on_call_record = lambda record: persist_call_record(db, record)
     try:
         with break_glass_cross_tenant():
+            if tenant_id:
+                attach_circuit_breaker(gateway, db, tenant_id)
             summary = run_eval_suite(gateway, tenant_id=tenant_id) if tenant_id else run_eval_suite(gateway)
             db.add(AgentEvalRun(
                 tenant_id=tenant_id, triggered_by=triggered_by, model_provider=summary["model_provider"],

@@ -106,23 +106,36 @@ Known limits, stated rather than hidden:
   fuzzy matching. A row whose reference doesn't match a real asset/customer name exactly is
   skipped and counted (`skipped_unmatched_asset_ref`/`skipped_unknown_customer`), never guessed.
 
-## Known tracked item: Connector Studio is a registration surface for four of six kinds
+## Known tracked item: Connector Studio — five of six kinds are genuine data/action paths, `scada` never will be
 
 `GET/POST /connectors` (SSRF-hardened, vaulted credentials, maker-checker) categorises a
 connector's `kind` (`generic`/`market_energy_purchase`/`scada`/`iot`/`database`/`data_table`).
-Four of the six still only do what they always did: store config, run a reachability test, and
-gate activation. Grepping the codebase confirms nothing outside `routers/connectors.py` reads a
-`Connector` row for these kinds — `forecast.py`'s price series is a synthetic diurnal model, and
-`ot-gateway-sim` has no reference to `Connector` at all. Wiring a `market_energy_purchase`
-connector into `forecast.py`'s price forecast, or an `iot` connector into replacing the
-edge-simulator's synthetic sensor feed, is each a distinct, non-trivial feature (scheduled
-polling/caching, protocol-specific validation) — deliberately not attempted as a same-session
-bolt-on, and **`scada` specifically never will be**: doc 05's non-negotiable architecture keeps
-OT command dispatch on the independent, safety-critical `ot-gateway-sim` path exclusively, so a
-user-registered SCADA connector deliberately has no route into real command execution regardless
-of its activation status, by design, not by omission.
+Originally four of the six were registration-only (store config, run a reachability test, gate
+activation, nothing more); a same-day follow-up closed two of those four:
 
-The other two kinds are genuine, working data paths, not registration-only:
+- `market_energy_purchase`: `POST /connectors/{id}/ingest` (an active connector only) fetches its
+  `endpoint_url`, expects a JSON array (or `{"prices": [...]}`) of `{timestamp, price_per_mwh}`
+  objects (`parse_market_price_entries()` in `backend/app/routers/connectors.py`, pure and unit-
+  tested independent of any DB/HTTP/FastAPI context), and writes it as a real `Forecast` series
+  (`variable="price"`, `model_version="live-market-v1"`) for every `grid_interconnection` asset —
+  taking over from the synthetic price curve for whatever it covers.
+- `iot`: `POST /connectors/{id}/ingest` fetches its `endpoint_url` and parses the response through
+  the identical generic asset_id/metric/event_time/value/unit shape a file upload or `data_table`
+  connector already uses, publishing it as real telemetry via the same `publish_readings()` path.
+
+Neither of these two kinds gates or auto-starts the optimizer, by the same explicit request that
+narrowed the gate to `database`/`data_table` only (see "Portfolio-wide start/stop gate" below) —
+they're real ingestion, just not the two kinds treated as "a connected data source."
+
+`generic` remains a plain registration/reachability-test surface (there is no fixed shape to ingest
+against — it's whatever a bespoke external system happens to expose), and **`scada` specifically
+never will ingest or dispatch through this surface**: doc 05's non-negotiable architecture keeps OT
+command dispatch on the independent, safety-critical `ot-gateway-sim` path exclusively, so a
+user-registered SCADA connector deliberately has no route into real command execution regardless
+of its activation status, by design, not by omission — this is the one item on
+`PRODUCTION_READINESS_REVIEW.md`'s punch list that isn't closed by more engineering effort, ever.
+
+`data_table` and `database` were already genuine, working data paths before this pass:
 
 - `data_table`: `POST /connectors/{id}/ingest` (an active connector only) fetches its
   `endpoint_url` — an http(s) URL, *or* a path under the platform's watched local data folder
@@ -137,7 +150,7 @@ The other two kinds are genuine, working data paths, not registration-only:
   (`backend/app/ingestion/db_source.py`, no raw SQL string interpolation of the table name) and
   pulls its rows in.
 
-Either kind, when the file/table name matches one of the reference dataset's own 8 files
+Any of these four ingesting kinds, when the file/table name matches one of the reference dataset's own 8 files
 (`backend/app/ingestion/hackathon_dataset.py`'s `KNOWN_TABLE_KEYS`), routes through that module's
 canonical Asset-telemetry/Customer mapping instead of the generic
 asset_id/metric/event_time/value/unit shape — the same mapping the standalone
@@ -149,7 +162,7 @@ shape (also raised that endpoint's size cap from 25MB to 100MB, since
 `02_customer_energy_consumption_tariff.csv` alone is 76MB). `battery`/`scenario_actions` are
 recognized but still explicitly unmapped (reported as
 `status: "not_mapped"`, not silently ingesting nothing) — same documented gap as the standalone
-script. See `PRODUCTION_READINESS_REVIEW.md` §4 item 2/8.
+script.
 
 ## Portfolio-wide start/stop gate
 
@@ -179,25 +192,75 @@ telemetry stream.
 
 `AgentCallLog` persists every actual model-gateway call (real token usage, latency, schema-validity,
 retries) — this is genuine telemetry, not synthetic. The evaluation harness
-(`agent/eval_harness.py`) is 6 fixed cases across 3 agents, correctly distinguishing
-schema-structural checks (pass under mock) from reasoning-behavioral checks (skipped under mock,
-since mock cannot reason about a scenario) — but it is a demonstration of the *pattern*, not a
-comprehensive eval program. A real one needs a much larger labelled corpus, ideally drawn from real
-incident/decision history once the platform has some, plus statistical treatment over repeated runs
-and human/rubric scoring for qualitative findings. There is also no timeout/circuit-breaker around
-`ModelGateway.complete_structured` — a slow or unreachable Anthropic API currently just makes a
-decision cycle run long rather than degrading gracefully.
+(`evaluation/eval_harness.py`) grew, in a same-day follow-up, from 6 fixed cases across 3 agents to
+**15 cases across 7 of the 9 specialist agents** (data_quality, risk_critic, governance, forecast,
+asset, market — structural only, see the harness's own module docstring for why — and grid,
+optimisation_reviewer), each behavioral case grounded in a documented, unambiguous rule from that
+agent's own system prompt (e.g. "a solar asset with zero forecast rows is at least a MEDIUM
+finding") rather than a guessed threshold. It correctly distinguishes schema-structural checks (pass
+under mock) from reasoning-behavioral checks (skipped under mock, since mock cannot reason about a
+scenario, verified by `tests/test_eval_harness.py`) — but it is still, honestly, a demonstration of
+the *pattern* at a larger scale, not a comprehensive eval program. **Still open, and not a coding
+task**: a real one needs a much larger labelled corpus, ideally drawn from real incident/decision
+history once the platform has some, plus statistical treatment over repeated runs and human/rubric
+scoring for qualitative findings — none of which a coding session can manufacture without real
+usage data.
 
-## Known tracked item: frontend dependency advisories
+A related gap — "no timeout/circuit-breaker around `ModelGateway.complete_structured`" — was closed
+the same day; see "Configuration Studio and the same-day production-readiness closures" below.
 
-`npm audit` flags moderate/high advisories in `vite`/`esbuild` (dev-server-only request forwarding,
-not present in the production static build) and `react-router-dom` (an open-redirect variant and an
-SSR-hydration deserialisation issue — this app has no SSR and builds no redirect target from user
-input, so neither is reachable here). Both fixes require a major version bump (Vite 5→8, React
-Router 6→7) outside the currently-declared semver ranges; `npm audit fix --force` applies them but
-wasn't run this session so the bump could be verified properly (full re-test of routing and the dev
-build) rather than shipped untested. Tracked here rather than silently ignored — bump both in a
-dedicated follow-up pass.
+## Known tracked item: frontend dependency advisories — closed
+
+`npm audit` used to flag moderate/high advisories in `vite`/`esbuild` (dev-server-only request
+forwarding, not present in the production static build) and `react-router-dom` (an open-redirect
+variant and an SSR-hydration deserialisation issue — this app has no SSR and builds no redirect
+target from user input, so neither was reachable here even before the fix). Both required a major
+version bump outside the previously-declared semver ranges (`vite` 5→8, `react-router-dom` 6→7,
+`@vitejs/plugin-react` 4→6 for the matching peer range) — done in a same-day follow-up via `npm
+audit fix --force`, verified with a full regression pass rather than shipped untested: a clean `tsc
+-b && vite build`, and a live browser walkthrough (password login, SSO login via the new Keycloak
+integration, Portfolio Operations, Connector Studio, Configuration Studio) with no runtime errors.
+`npm audit` now reports 0 vulnerabilities. This codebase only uses react-router's classic
+declarative API (`BrowserRouter`/`Routes`/`Route`/`Link`/`NavLink`/`useNavigate`/`useLocation`),
+which v7 keeps backward-compatible — the data-router/loader APIs that would need real migration work
+were never used here.
+
+## Configuration Studio and the same-day production-readiness closures
+
+`PRODUCTION_READINESS_REVIEW.md`'s consolidated punch list (§4) named eight follow-up items. AWS
+apply, real SCADA/OT hardware, legal/compliance sign-off, and production secrets management are
+explicitly not coding tasks (no real cloud account, site survey, DPO, or KMS setup exists for a
+coding session to use) and are unchanged. The four that *are* coding tasks were closed the same day,
+made runtime-configurable rather than env-var-only, and surfaced in a new **Configuration Studio**
+dashboard page (`manage:settings`/`manage:platform_config`, backed by a new tenant-scoped
+`PlatformSettings` table, `backend/app/routers/configuration.py`):
+
+- **Live weather feed** (`policy/live_weather.py`): a real, keyless call to Open-Meteo's forecast
+  API for a configured site lat/lon, replacing the synthetic solar diurnal curve / seasonal-naive
+  wind speed proxy in `policy/forecast.py` with real forecasted cloud-cover/wind-speed data for the
+  whole 24h horizon. Falls back to the synthetic model automatically (disabled, no coordinates, or
+  the API call fails for any reason) — verified against the real Open-Meteo endpoint, not mocked.
+- **Model gateway circuit breaker** (`guardrails/circuit_breaker.py`): a per-tenant, Redis-backed
+  breaker + call timeout wrapped around `ModelGateway.complete_structured` — opens after N
+  consecutive failures (schema-invalid, timeout, provider error), so a slow/down provider degrades a
+  decision cycle gracefully (immediate fail-closed, zero tokens spent) instead of just running long.
+  Thresholds are per-tenant and live-editable from Configuration Studio.
+- **Real external IdP** (`backend/app/routers/auth.py`'s `/auth/sso/{login,callback}` +
+  `infrastructure/keycloak-init/realm-export.json`): a genuine OIDC authorization-code flow against
+  a bundled, real, spec-compliant Keycloak container — actual browser redirect, server-to-server
+  token exchange, and a JWKS-verified `id_token` (tested against both a correctly-signed and a
+  forged token, so the signature check is proven to actually reject a bad token, not just accept a
+  good one). Auto-provisions a local `User` row (linking by email if one already exists) on first
+  SSO login. Per-tenant opt-in (`PlatformSettings.sso_enabled`) since not every tenant necessarily
+  federates with the same IdP. Verified live end-to-end via the actual browser flow, not just unit
+  tests.
+- **`market_energy_purchase`/`iot` connector ingestion** — see the Connector Studio section above.
+
+This is deliberately still bounded by the same honesty standard as the rest of this document: the
+live weather feed is real data from a real (if free-tier) provider, not a second synthetic model in
+disguise; the Keycloak integration is a real, standard IdP, not a stub that always says "yes"; and
+none of this claims to close the AWS/hardware/legal/secrets items, which remain exactly as described
+in `PRODUCTION_READINESS_REVIEW.md`.
 
 ## Object storage: SeaweedFS, not MinIO
 

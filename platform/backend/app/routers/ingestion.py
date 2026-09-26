@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from reo_common.events import EventBus
 from reo_common.model_gateway import GatewayError, get_model_gateway
+from reo_common.platform_settings import attach_circuit_breaker
 from reo_common.security import AuthContext
 from sqlalchemy import select
 from sqlalchemy.exc import DataError
@@ -142,6 +143,7 @@ async def upload_telemetry_file(
     assets = db.execute(select(Asset).where(Asset.tenant_id == ctx.tenant_id)).scalars().all()
     asset_context = [{"name": a.name, "asset_type": a.asset_type, "id": a.id} for a in assets]
     gateway = get_model_gateway()
+    attach_circuit_breaker(gateway, db, ctx.tenant_id)
     gateway.on_call_record = lambda record: persist_call_record(db, record)
     try:
         proposal_result = propose_mapping(
@@ -343,6 +345,7 @@ async def upload_document(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "could not render document pages — file may be corrupt")
 
     gateway = get_model_gateway()
+    attach_circuit_breaker(gateway, db, ctx.tenant_id)
     gateway.on_call_record = lambda record: persist_call_record(db, record)
     try:
         if is_docx:

@@ -51,7 +51,7 @@ engine and (for anything but the lowest-risk bounded actions) a human approval.
 | `guardrails` | BR-03 (independent validator), TR-SSRF-01, TRD §5/§6 (agent guardrails) | validator.py, ssrf.py, rate_limit.py, pii.py — safety/validation logic, structurally separate from what it checks |
 | `evaluation` | doc 07 (agent evaluation), TRD §5 (guardrail logging) | AgentCallLog/AgentEvalRun persistence + the fixed-scenario eval harness |
 | `output` | FR-AU-001 (audit), FR-EXP-001/002 | the hash-chained audit log (`output/audit.py`) + Excel export worker |
-| `packages/reo_common` | TR-AUTH-01, doc 07 (model gateway) | config, vendor-neutral model gateway, Redis event bus, JWT/RBAC auth, secrets vault, digital-twin helpers — cross-cutting code every service above depends on |
+| `packages/reo_common` | TR-AUTH-01, doc 07 (model gateway) | config, vendor-neutral model gateway (+ per-tenant circuit breaker, `platform_settings.py`), Redis event bus, JWT/RBAC + real OIDC/SSO auth (`backend/app/routers/auth.py`'s `/auth/sso/*` against the bundled Keycloak container), secrets vault, digital-twin helpers — cross-cutting code every service above depends on |
 
 ## Tenant isolation (BR-07 / FR-MT-001)
 
@@ -90,7 +90,8 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Approval Inbox | `GET /governance/approvals`, `POST /governance/approvals/{id}/decide` |
 | Live Signal Monitor | `GET /signals` |
 | Action Tickets | `GET /actions` |
-| Connector Studio | `GET/POST /connectors` (incl. `kind`: generic/market_energy_purchase/scada/iot/database/data_table), `POST /connectors/{id}/{test,activate,disable,ingest}` (`ingest`: `data_table` (URL or local watched-folder path) and `database` (`postgresql://` connection string + table name) fetch/query and route recognized reference-dataset files/tables through `hackathon_dataset.py`'s canonical mapping, else the generic telemetry shape) |
+| Connector Studio | `GET/POST /connectors` (incl. `kind`: generic/market_energy_purchase/scada/iot/database/data_table), `POST /connectors/{id}/{test,activate,disable,ingest}` (`ingest`: `data_table`/`database` route recognized reference-dataset files/tables through `hackathon_dataset.py`'s canonical mapping else the generic telemetry shape; `market_energy_purchase` writes a real price `Forecast` series; `iot` publishes real telemetry through the same generic shape; `generic`/`scada` remain registration/reachability-test only, the latter permanently by design — see `SIMPLIFICATIONS.md`) |
+| Configuration Studio | `GET/PUT /configuration/settings` (`manage:settings`/`manage:platform_config`) — live weather feed, model gateway circuit breaker thresholds, SSO enablement, all per-tenant and live-editable with no redeploy |
 | Policy Studio | `GET/PUT /governance/autonomy-policy`, `GET/PUT /governance/objective-policy`, `POST /governance/e-stop` |
 | Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
 | Agent Observability | `GET /observability/summary`, `GET /observability/agent-calls`, `GET/POST /observability/eval-runs[/run]` |

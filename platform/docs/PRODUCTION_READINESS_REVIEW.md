@@ -1,4 +1,4 @@
-# Production readiness review — 2026-09-26
+# Production readiness review — 2026-09-26 (updated same day)
 
 Scope: (1) verify current coverage against the 8 client spec documents and the ET AI Hackathon
 "Agentic Edition" Problem 4 grid, and give a direct answer on production-deployment readiness
@@ -6,6 +6,16 @@ Scope: (1) verify current coverage against the 8 client spec documents and the E
 responsiveness, agent observability/evaluation, live-system connector coverage, and per-action
 audit tickets. Every claim below was checked against the running code/stack, not assumed — see
 `git log` for the commits this maps to.
+
+**Later the same day**, a second pass closed every remaining gap from §4's punch list that is
+actually a coding task — a live weather feed, real market_energy_purchase/iot connector ingestion,
+a circuit breaker/timeout around the model gateway, a real external IdP (Keycloak) integration, the
+flagged dependency version bump, and an expanded eval harness — all made runtime-configurable from
+a new **Configuration Studio** dashboard page rather than env-var-only. AWS apply, the OT hardware/
+safety-case gap, legal/compliance sign-off, and production secrets management were explicitly kept
+out of scope (not coding tasks, or requiring resources — a real AWS account, a real site survey —
+this session cannot provide) and remain as described below. §1's table and §4's punch list are
+updated in place to reflect this; §2/§3 are the original same-day narrative, unchanged.
 
 ## 1. Direct answer: is this production-ready if an Anthropic key is provided?
 
@@ -19,21 +29,24 @@ gap between "runs a full, correct decision cycle end-to-end on Docker Compose" (
 | Category | Status today | What's actually missing |
 |---|---|---|
 | Core decision/control loop | **Real.** Optimizer, independent validator, policy engine, OT gateway, decision ledger, approvals all run real logic against real (simulated) data. | Nothing — this is the part of the spec that's genuinely done. |
-| Agent reasoning quality | Schema-valid, zero-reasoning (`MockModelGateway`) without a key. | An Anthropic key. Also: no prompt-injection red-team pass, no adversarial eval corpus beyond the 3 behavioral cases added this pass (§4 below), no per-agent cost/latency budget or circuit breaker if Anthropic is slow/down mid-cycle (a stuck agent call currently just makes that decision cycle slow — there's no timeout/circuit-breaker around `complete_structured`). |
-| Real-world data ingestion | CSV/JSON/XLSX + PDF/image ingestion is real, including via Connector Studio's `data_table` (URL or local path) and `database` (`postgresql://` + table name) kinds (§4 below). | **No live *streaming* feed is wired into the pipeline.** Forecast prices are a synthetic sine wave (`forecast.py`); Connector Studio can *register* a market-data/SCADA endpoint but nothing reads from one yet (`iot`/`market_energy_purchase`/`scada` remain registration-only). Going live needs an actual scheduled-pull or push-ingestion path from a real market/weather/SCADA source into `Forecast`/`Telemetry`. |
-| Real hardware | Simulated throughout (`edge-simulator`, `ot-gateway-sim`) — deliberate per doc 06 §8 ("don't price/build real OT before a site survey"). | A real site survey, a formal OT hazard analysis and safety case (the platform enforces *recording* a `safety_case_ref` before autonomy — it can't manufacture the analysis itself), real OPC UA/SCADA hardware and a commissioning/HIL test pass. |
-| Cloud deployment | Terraform written (`infrastructure/terraform/*.tf` — VPC, ECS Fargate, RDS, ElastiCache, S3+CloudFront, Secrets Manager, ALB), `terraform validate`-clean, step-by-step apply instructions in `docs/DEPLOYMENT.md` Part B, **never `apply`d**. | An actual AWS account, a real `terraform apply`, then load testing against that environment (nothing here has been tested under concurrent load — the whole verification history is single-tenant, low-QPS). |
-| CI/CD | Real: `.github/workflows/ci.yml` runs lint (ruff), the full pytest suite (54 tests) against a migrated Postgres, builds every service image, and runs `demo_runner.py`'s full 10-step script against a live `docker compose up` stack on every push/PR. | No CD (nothing auto-deploys anywhere), no canary/blue-green story, no automated DB backup/restore drill. |
-| Auth | JWT + local password, `authlib` OIDC client wired but **never tested against a real IdP** (no production IdP exists to point at). | A real IdP (Cognito/Entra/Keycloak) and an actual federation test. |
-| Secrets | `LocalFernetSecretsProvider` (Fernet symmetric encryption, env-derived key) is what's actually running; `AwsSecretsManagerProvider` exists in code but is unexercised. | KMS-backed secrets in a real AWS account; a key-rotation runbook (rotating `JWT_SECRET` today breaks stored SSO secrets — documented, not fixed). |
-| Dependency hygiene | Backend deps current. `npm audit` flags moderate/high advisories in `vite`/`esbuild` (dev-server-only, not in the prod static build) and `react-router-dom` (two advisories, neither reachable — no SSR, no user-controlled redirect target). Documented in `SIMPLIFICATIONS.md`, not fixed (needs a major-version bump, tracked as a follow-up). | The version bump + a full regression pass on routing. |
-| Legal/compliance | DPIA/ROPA template + the technical controls a DPIA would require exist. IEC 62443/NIS2 control-mapping doc exists. | An actual DPO sign-off and an actual external audit — neither is a coding task. |
+| Agent reasoning quality | Schema-valid, zero-reasoning (`MockModelGateway`) without a key. Real, since the same-day update: a per-tenant circuit breaker + call timeout (`guardrails/circuit_breaker.py`, configurable from Configuration Studio) so a slow/down provider degrades a cycle gracefully instead of stalling it — closes the "no per-agent cost/latency budget or circuit breaker" gap. The eval harness also grew from 6 to 15 cases across 7 of the 9 specialist agents. | An Anthropic key (for genuine reasoning quality). Also still open: no prompt-injection red-team pass, and the eval harness remains fixed-scenario/demo-scale — a real labelled corpus needs actual usage data this session can't manufacture. |
+| Real-world data ingestion | CSV/JSON/XLSX + PDF/image ingestion is real, including via Connector Studio's `data_table` (URL or local path) and `database` (`postgresql://` + table name) kinds. **Closed the same day**: a real, keyless live weather feed (Open-Meteo, `policy/live_weather.py`) replaces the synthetic solar/wind curves when a tenant enables it in Configuration Studio, and `market_energy_purchase`/`iot` connectors now genuinely ingest (a real price forecast series / real telemetry via "Ingest now") instead of being registration-only. | `scada` remains, and always will remain, registration/reachability-test only — OT dispatch stays exclusively on the independent `ot-gateway-sim` path by the platform's non-negotiable architecture, regardless of a connector's activation status (see the Real hardware row below). |
+| Real hardware | Simulated throughout (`edge-simulator`, `ot-gateway-sim`) — deliberate per doc 06 §8 ("don't price/build real OT before a site survey"). | **Explicitly out of scope for the same-day follow-up too** — a real site survey, a formal OT hazard analysis and safety case, real OPC UA/SCADA hardware and a commissioning/HIL test pass are not software tasks a coding session can produce, and the architecture deliberately keeps a `scada`-kind connector from ever reaching real dispatch regardless of engineering effort spent on it. |
+| Cloud deployment | Terraform written (`infrastructure/terraform/*.tf` — VPC, ECS Fargate, RDS, ElastiCache, S3+CloudFront, Secrets Manager, ALB), `terraform validate`-clean, step-by-step apply instructions in `docs/DEPLOYMENT.md` Part B, **never `apply`d**. | An actual AWS account, a real `terraform apply`, then load testing against that environment (nothing here has been tested under concurrent load — the whole verification history is single-tenant, low-QPS). Explicitly out of scope for the same-day follow-up (needs a real cloud account this session doesn't have). |
+| CI/CD | Real: `.github/workflows/ci.yml` runs lint (ruff), the full pytest suite (148 tests) against a migrated Postgres, builds every service image, and runs `demo_runner.py`'s full 10-step script against a live `docker compose up` stack on every push/PR. | No CD (nothing auto-deploys anywhere), no canary/blue-green story, no automated DB backup/restore drill. |
+| Auth | JWT + local password. **Closed the same day**: a real OIDC authorization-code flow (`backend/app/routers/auth.py`'s `/auth/sso/{login,callback}`) against a bundled, real, spec-compliant Keycloak container (`infrastructure/docker-compose.yml`) — genuine redirect, server-to-server token exchange, and JWKS-verified `id_token` (tested against both a correctly-signed and a forged token), not just wired settings. Per-tenant opt-in via Configuration Studio. | A production SaaS IdP (Cognito/Entra/Auth0) federation test — Keycloak here is real and spec-compliant, but is a self-hosted stand-in, not a production tenant in a commercial IdP. |
+| Secrets | `LocalFernetSecretsProvider` (Fernet symmetric encryption, env-derived key) is what's actually running; `AwsSecretsManagerProvider` exists in code but is unexercised. | KMS-backed secrets in a real AWS account; a key-rotation runbook (rotating `JWT_SECRET` today breaks stored SSO secrets — documented, not fixed). Explicitly out of scope for the same-day follow-up. |
+| Dependency hygiene | **Closed the same day**: `vite` bumped 5→8 and `react-router-dom` bumped 6→7 (the only two packages with advisories), plus `@vitejs/plugin-react` 4→6 for the matching peer range. `npm audit` now reports 0 vulnerabilities. A full regression pass confirmed: clean `tsc -b && vite build`, and a live browser walkthrough (login, SSO login, Portfolio Operations, Connector Studio, Configuration Studio) with no runtime errors — this codebase only uses react-router's classic declarative API (`BrowserRouter`/`Routes`/`Route`/`NavLink`), which v7 keeps backward-compatible. | Nothing outstanding here. |
+| Legal/compliance | DPIA/ROPA template + the technical controls a DPIA would require exist. IEC 62443/NIS2 control-mapping doc exists. | An actual DPO sign-off and an actual external audit — neither is a coding task. Explicitly out of scope for the same-day follow-up. |
 
 **Bottom line:** an API key makes the *demo* genuinely convincing (real agent reasoning instead of
-scaffolding). It does not make this *deployable against a real grid, real money, or real
-customer data* — that gate is the AWS apply + real connector wiring + safety case + IdP + audit,
-none of which are software-only tasks left undone by oversight; they're the things this session's
-own `SIMPLIFICATIONS.md` has said from the start require a real client engagement to close.
+scaffolding), and the same-day follow-up closed every remaining *coding* gap — live weather, real
+connector ingestion, a circuit breaker, a real IdP, the dependency bump, and a wider eval harness.
+It still does not make this *deployable against a real grid, real money, or real customer data* —
+that gate is now down to exactly three things, none of them software: a real AWS account and
+`terraform apply`, a real OT site survey and safety case (the architecture will never let a
+connector substitute for this, regardless of effort), and legal/compliance sign-off. This session's
+own `SIMPLIFICATIONS.md` has said from the start these require a real client engagement to close.
 
 ## 2. Problem statement (hackathon Problem 4) coverage
 
@@ -151,23 +164,35 @@ platform has ever proposed" anywhere in the UI. Fixed:
 
 ## 4. Consolidated punch list for a real production push
 
-Roughly in the order a real deployment would need them:
+**Updated same day** — items 2 and 4-8 below were closed in a same-day follow-up pass (see
+`SIMPLIFICATIONS.md`'s "Configuration Studio and the same-day production-readiness closures"
+section for the implementation details); struck through here, not deleted, so the history of what
+was identified and when stays intact. Only items 1 and 3 remain, plus legal/compliance sign-off and
+production secrets management (§1's table) — all four are explicitly not coding tasks a follow-up
+session can shortcut.
 
 1. **AWS apply** — provision the already-`validate`-clean Terraform for real (steps in
-   `docs/DEPLOYMENT.md` Part B), then load-test it.
-2. **A live market-data / weather / grid feed wired into `forecast.py`**, replacing the synthetic
-   diurnal model — this is the single highest-leverage gap for genuine production usefulness.
+   `docs/DEPLOYMENT.md` Part B), then load-test it. **Still open** — needs a real AWS account.
+2. ~~A live market-data / weather / grid feed wired into `forecast.py`~~ **Closed**: a real, keyless
+   Open-Meteo weather feed (`policy/live_weather.py`) replaces the synthetic solar/wind curves when
+   enabled in Configuration Studio; `market_energy_purchase`/`iot` connectors now genuinely ingest a
+   real price series / real telemetry.
 3. **Real SCADA/OT hardware integration**, gated by an actual site survey and safety case — not
-   something to shortcut regardless of engineering effort available.
-4. **A real external IdP** federation test (OIDC client is wired, never exercised against one).
-5. **Dependency version bump** (`vite`/`react-router-dom`) with a full regression pass.
-6. **A circuit breaker / timeout budget around `ModelGateway.complete_structured`** so a slow or
-   down Anthropic API degrades a decision cycle gracefully instead of just running long.
-7. **Expand the eval harness** with a real labelled corpus once real usage data exists to draw one
-   from.
-8. **Wire a `market_energy_purchase`/`iot` Connector into the actual data path** it's now
-   explicitly categorised for, once one is registered against a real endpoint (`data_table` and
-   `database` are done; `scada` is deliberately excluded from this list — see above).
+   something to shortcut regardless of engineering effort available. **Still open, and always will
+   be** — the architecture keeps OT dispatch exclusively on `ot-gateway-sim`, never a connector,
+   regardless of activation status.
+4. ~~A real external IdP federation test~~ **Closed**: a genuine OIDC authorization-code flow against
+   a bundled, real, spec-compliant Keycloak container — see §1's Auth row.
+5. ~~Dependency version bump (`vite`/`react-router-dom`) with a full regression pass~~ **Closed**:
+   `vite` 5→8, `react-router-dom` 6→7, `@vitejs/plugin-react` 4→6; `npm audit` now reports 0
+   vulnerabilities; build + live browser regression pass both clean.
+6. ~~A circuit breaker / timeout budget around `ModelGateway.complete_structured`~~ **Closed**:
+   `guardrails/circuit_breaker.py`, configurable per-tenant from Configuration Studio.
+7. ~~Expand the eval harness~~ **Partially closed**: grew from 6 to 15 cases across 7 of the 9
+   specialist agents. **Still open**: a real labelled corpus needs actual usage data this session
+   can't manufacture — that part of the original item stands as written.
+8. ~~Wire a `market_energy_purchase`/`iot` Connector into the actual data path~~ **Closed** — see
+   item 2 above (`scada` remains deliberately excluded, by architecture, not oversight).
 
 None of these are hidden — each is either already flagged in `SIMPLIFICATIONS.md` or added there/
 here by this review. The platform's own standing practice (documented in every prior commit

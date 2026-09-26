@@ -36,9 +36,21 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiry_minutes: int = 60 * 8
 
+    # Real external IdP (production-readiness gap: "authlib OIDC client
+    # wired but never tested against a real IdP") — the bundled Keycloak
+    # container (infrastructure/docker-compose.yml) is a real, standard,
+    # spec-compliant OIDC provider, not a mock. `oidc_issuer` is the
+    # container-network base URL the api process calls server-to-server
+    # (token exchange, JWKS) — e.g. http://keycloak:8080/realms/reo.
+    # `oidc_authorize_url_public` is the host-reachable equivalent the
+    # browser is actually redirected to — the same split as
+    # S3_ENDPOINT_URL/S3_PUBLIC_ENDPOINT_URL, for the same reason (a
+    # container-network hostname means nothing to a browser on the host).
     oidc_issuer: str | None = None
+    oidc_authorize_url_public: str | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None
+    frontend_base_url: str = "http://localhost:5173"
 
     # Secrets vault (local Fernet master key; AWS deployment uses Secrets Manager/KMS instead)
     vault_master_key: str = "y2N4x8dGm4KxG3nq6z2m3sVfR8k1cQ2s1r7pR9lY1yE="
@@ -67,11 +79,27 @@ class Settings(BaseSettings):
     model_rate_limit_per_minute: int = 20
     model_rate_limit_per_day: int = 2000
 
+    # Model gateway circuit breaker (guardrails/circuit_breaker.py) — process-
+    # wide defaults, used the first time a tenant's PlatformSettings row is
+    # created (see backend/app/routers/configuration.py). From then on each
+    # tenant's own row (editable from the dashboard's Configuration Studio)
+    # is the source of truth, not these env defaults.
+    model_gateway_circuit_breaker_enabled_default: bool = True
+    model_gateway_timeout_seconds_default: float = 30.0
+    model_gateway_circuit_failure_threshold_default: int = 3
+    model_gateway_circuit_cooldown_seconds_default: int = 60
+
     # Data ingestion
     data_watch_dir: str = "/data"
 
     # OT command gateway (separate service/trust boundary — see docs/ARCHITECTURE.md)
     ot_gateway_url: str = "http://ot-gateway-sim:8010"
+
+    # Real external IdP (Configuration Studio's "Identity Provider" panel
+    # toggles per-tenant sso_enabled; these three describe the one OIDC
+    # provider this deployment federates with — the bundled Keycloak
+    # container locally, see infrastructure/docker-compose.yml).
+    oidc_redirect_uri: str = "http://localhost:8000/auth/sso/callback"
 
     # Platform
     environment: str = "local"

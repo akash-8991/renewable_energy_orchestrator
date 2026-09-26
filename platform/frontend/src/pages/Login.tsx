@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiBaseUrl } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Login() {
@@ -61,6 +62,14 @@ export default function Login() {
           </div>
           <button type="submit" disabled={loading} style={{ width: "100%" }}>
             {loading ? "Signing in..." : "Sign in"}
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            style={{ width: "100%", marginTop: 10 }}
+            onClick={() => { window.location.href = `${apiBaseUrl}/auth/sso/login?tenant_slug=${encodeURIComponent(tenantSlug)}`; }}
+          >
+            Log in with SSO
           </button>
           <p className="muted" style={{ fontSize: 11, marginTop: 16 }}>
             Demo credentials pre-filled. See <code className="mono">docs/DEPLOYMENT.md</code> (§ A7) for the

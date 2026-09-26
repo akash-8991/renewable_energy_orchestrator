@@ -22,7 +22,7 @@ platform/
 ├── backend/          FastAPI HTTP API — ingestion, digital twin, decisions, governance,
 │                      connectors, exports, audit, admin, observability. The dashboard's
 │                      only entry point into the platform.
-├── frontend/          React + TypeScript + Vite dashboard (14 workspaces).
+├── frontend/          React + TypeScript + Vite dashboard (15 workspaces).
 ├── agent/              The 9 specialist LLM agents (doc 07) + their orchestration loop
 │                      (worker.py). Agents only ever produce typed JSON evidence — never a
 │                      command — consumed by policy/ below.
@@ -93,7 +93,9 @@ This brings up: Postgres+TimescaleDB, Redis, SeaweedFS (S3-compatible object sto
 MinIO discontinued free Docker image distribution entirely, see `docs/SIMPLIFICATIONS.md`),
 `source-db` (a plain Postgres pre-loaded with
 the reference dataset as real SQL tables — stands in for "a client's own database" for Connector
-Studio's `database` kind, see `docs/DEPLOYMENT.md` A9a), runs migrations, then starts `api`,
+Studio's `database` kind, see `docs/DEPLOYMENT.md` A9a), `keycloak` (a real OIDC identity provider
+for SSO login — see `docs/DEPLOYMENT.md`'s SSO section — optional, never blocks the rest of the
+stack from starting), runs migrations, then starts `api`,
 `optimizer-worker`, `agent-worker`, `ot-gateway-sim`, `edge-simulator`, `export-worker`, `web`.
 
 Seed the reference demo tenant (5 solar farms, 3 wind farms, 2 BESS, 6 industrial consumers, one
@@ -118,14 +120,23 @@ active `database` or `data_table` connector exists in Connector Studio (Document
 still ingest real data but no longer unlock it on their own). See `docs/DEPLOYMENT.md` A7 step 3
 and `docs/SIMPLIFICATIONS.md`'s "Portfolio-wide start/stop gate" section.
 
-The dashboard has 14 workspaces (sidebar): Portfolio Operations, Decision Centre, Customers,
-Approval Inbox, Live Signal Monitor, Action Tickets, Connector Studio, Document Intake,
-Policy Studio, Simulation Lab, Agent Observability, Audit & Exports, Tenant Administration,
-Platform Operations — each role
+The dashboard has 15 workspaces (sidebar): Portfolio Operations, Decision Centre, Customers,
+Approval Inbox, Live Signal Monitor, Action Tickets, Connector Studio, Configuration Studio,
+Document Intake, Policy Studio, Simulation Lab, Agent Observability, Audit & Exports, Tenant
+Administration, Platform Operations — each role
 sees a different subset per its RBAC permissions (e.g. only `portfolio_manager` can drive
-Simulation Lab; only `tenant_admin` can provision users/tenants; only `model_admin` can trigger an
-evaluation run) — except `platform_admin`, which is a deliberate superuser and can do all of it
-(see `docs/DEPLOYMENT.md`'s demo-account table).
+Simulation Lab; only `tenant_admin` can provision users/tenants or edit Configuration Studio; only
+`model_admin` can trigger an evaluation run) — except `platform_admin`, which is a deliberate
+superuser and can do all of it (see `docs/DEPLOYMENT.md`'s demo-account table).
+
+**Configuration Studio** makes the production-readiness punch list's runtime-configurable knobs
+self-service, no redeploy needed: a real live weather feed (Open-Meteo) that replaces the synthetic
+solar/wind forecast curves, the model gateway's circuit breaker/timeout budget, and per-tenant SSO
+enablement. A real, spec-compliant Keycloak identity provider is bundled too (`docker compose up`
+brings it up alongside everything else) — see `docs/DEPLOYMENT.md`'s SSO section to log in through
+it, or `docs/SIMPLIFICATIONS.md`'s "Configuration Studio and the same-day production-readiness
+closures" section for what's real here versus what's still explicitly out of scope (AWS, real OT
+hardware, legal sign-off, production secrets management).
 
 ## Run the demo script
 

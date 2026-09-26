@@ -10,6 +10,7 @@ const NAV = [
   { to: "/signals", label: "Live Signal Monitor" },
   { to: "/actions", label: "Action Tickets" },
   { to: "/connectors", label: "Connector Studio" },
+  { to: "/configuration", label: "Configuration Studio" },
   { to: "/documents", label: "Document Intake" },
   { to: "/policy", label: "Policy Studio" },
   { to: "/simulation", label: "Simulation Lab" },

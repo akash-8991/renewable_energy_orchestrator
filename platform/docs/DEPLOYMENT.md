@@ -120,8 +120,9 @@ shutdown of their free channel). SeaweedFS's S3 gateway is a verified drop-in: t
 ever does plain boto3 S3 calls (put/get object, presigned URLs), nothing MinIO-specific, so nothing
 above changes except the container running underneath `S3_ENDPOINT_URL`.
 
-First run pulls base images and builds 9 containers — expect 3–8 minutes depending on your
-connection. Watch progress with:
+First run pulls base images (including a real Keycloak identity-provider image for SSO login — see
+A7 below) and builds 9 containers — expect 3–8 minutes depending on your connection. Watch progress
+with:
 
 ```bash
 docker compose ps
@@ -165,17 +166,53 @@ You'll see a line ending `demo login: any email above / password 'Password123!' 
    - **Document Intake** (top of Portfolio Operations) is a separate, independent ingestion path —
      uploading a `.csv`/`.json`/`.xlsx` (structured telemetry) or `.pdf`/`.png`/`.jpg`/`.docx` (a
      document, read via vision or extracted text) really does ingest the data, but by design it no
-     longer auto-starts the optimizer; only the Connector Studio route above does that. The other
-     four registrable connector kinds (`generic`, `market_energy_purchase`, `scada`, `iot`) also
-     don't count toward this gate — they're for agents to act *out* on the world once a decision is
-     made, not for bringing data in (see `ARCHITECTURE.md`).
+     longer auto-starts the optimizer; only the Connector Studio route above does that.
+     `market_energy_purchase`/`iot` connectors also ingest real data (a price forecast series /
+     telemetry — see A9a) but likewise don't count toward this gate; `generic`/`scada` remain
+     registration/reachability-test only (see `ARCHITECTURE.md`).
 4. Once started, Portfolio Operations fills in with live generation/demand numbers that update
    every few seconds (the built-in `edge-simulator` publishes synthetic telemetry continuously
    regardless of this gate — starting/stopping controls the decision cycle and dashboard display,
-   not the underlying telemetry stream), and the sidebar's 14 workspaces come alive — Decision
+   not the underlying telemetry stream), and the sidebar's 15 workspaces come alive — Decision
    Centre is a good second stop; it fills in with a new entry roughly every 2 minutes as the
    optimizer's decision cycle runs. **Stop Optimizer** on Portfolio Operations returns to idle at
    any time.
+
+#### Configuration Studio
+
+A dedicated workspace for the production-readiness knobs that are runtime-configurable rather than
+env-var-only (`manage:settings`/`manage:platform_config`, so `tenant.admin`/`platform.admin`):
+
+- **Live weather feed** — enable it and set a site latitude/longitude to replace the synthetic
+  solar/wind forecast curves with real data from Open-Meteo (free, no API key). Takes effect on the
+  next decision cycle.
+- **Model gateway circuit breaker** — call timeout, failure threshold and cooldown for the per-tenant
+  breaker around every LLM call (`guardrails/circuit_breaker.py`).
+- **SSO** — toggles whether this tenant's users may log in via the identity provider below, in
+  addition to email/password.
+
+#### Logging in via SSO (real Keycloak IdP)
+
+`docker compose up` also brings up a **Keycloak** container — a real, spec-compliant OIDC identity
+provider, not a mock — pre-loaded with a "reo" realm, a "reo-platform" client, and one demo user
+(`sso.demo` / `Password123!`) from `infrastructure/keycloak-init/realm-export.json`. To try it:
+
+1. In Configuration Studio, enable **SSO** for the `demo-utility` tenant (any user with
+   `manage:settings` can do this — a first-time login enables it via the API too:
+   `curl -X PUT http://localhost:8000/configuration/settings -H "Authorization: Bearer $TOKEN" -d
+   '{"sso_enabled": true}'`).
+2. On the login screen, enter the tenant slug and click **Log in with SSO** — you're redirected to
+   Keycloak's own real login page (`http://localhost:8081/realms/reo/...`).
+3. Sign in as `sso.demo` / `Password123!`. Keycloak redirects back to `/auth/sso/callback`, which
+   exchanges the code for tokens, verifies the `id_token`'s signature against Keycloak's own
+   published JWKS, and issues this platform's own JWT — landing you back on Portfolio Operations,
+   authenticated. First login auto-provisions a local account (linked by email if one already
+   exists) with the `VIEWER` role.
+
+Keycloak's admin console is at `http://localhost:8081` (`admin`/`admin`) if you want to inspect or
+extend the realm — e.g. add a user whose email matches a seeded platform account (like
+`tenant.admin@demo-utility.test`) to test SSO login *linking into* an existing, more privileged
+account rather than provisioning a new viewer.
 
 #### Demo accounts (one per role)
 

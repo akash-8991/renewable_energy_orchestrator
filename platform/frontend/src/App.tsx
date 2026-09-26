@@ -5,6 +5,7 @@ import ActionLog from "./pages/ActionLog";
 import AgentObservability from "./pages/AgentObservability";
 import ApprovalInbox from "./pages/ApprovalInbox";
 import AuditExports from "./pages/AuditExports";
+import ConfigurationStudio from "./pages/ConfigurationStudio";
 import ConnectorStudio from "./pages/ConnectorStudio";
 import CustomerDecisions from "./pages/CustomerDecisions";
 import DecisionCentre from "./pages/DecisionCentre";
@@ -15,6 +16,7 @@ import PlatformOperations from "./pages/PlatformOperations";
 import PolicyStudio from "./pages/PolicyStudio";
 import PortfolioOperations from "./pages/PortfolioOperations";
 import SimulationLab from "./pages/SimulationLab";
+import SsoCallback from "./pages/SsoCallback";
 import TenantAdministration from "./pages/TenantAdministration";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
@@ -28,6 +30,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/sso-callback" element={<SsoCallback />} />
       <Route
         element={
           <RequireAuth>
@@ -43,6 +46,7 @@ function AppRoutes() {
         <Route path="/signals" element={<LiveSignalMonitor />} />
         <Route path="/actions" element={<ActionLog />} />
         <Route path="/connectors" element={<ConnectorStudio />} />
+        <Route path="/configuration" element={<ConfigurationStudio />} />
         <Route path="/documents" element={<DocumentIntake />} />
         <Route path="/policy" element={<PolicyStudio />} />
         <Route path="/simulation" element={<SimulationLab />} />

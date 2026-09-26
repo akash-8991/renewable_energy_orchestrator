@@ -8,6 +8,7 @@ and requires no counter-approval.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -21,7 +22,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from guardrails.ssrf import check_outbound_host, check_outbound_url
-from models.canonical import Connector, CredentialRef, Tenant
+from models.canonical import Asset, Connector, CredentialRef, Forecast, Tenant
 from output.audit import append_audit_event
 
 from ..deps import db_session, require_permission
@@ -277,15 +278,18 @@ def disable_connector(
 
 
 # ---------------------------------------------------------------------------
-# data_table / database ingestion — the two connector kinds actually wired to
-# a real effect. A market_energy_purchase/scada/iot connector registers and
-# reachability-tests its endpoint (same as before, see ARCHITECTURE.md for
-# what's registration-only vs live); data_table and database connectors
-# instead pull real rows in, either as generic telemetry (the
-# asset_id/metric/event_time/value/unit shape a file upload also uses) or,
-# for a filename/table name matching one of the reference dataset's own
-# files, through hackathon_dataset.py's canonical Asset/Customer mapping —
-# same validation, same quarantine path either way.
+# data_table / database / market_energy_purchase / iot ingestion. `scada`
+# remains registration + reachability-test only, by design (doc 05's
+# architecture keeps OT dispatch on the independent ot-gateway-sim path
+# exclusively, never a registered connector — see ARCHITECTURE.md). The
+# other four:
+#   - data_table / database: real telemetry/customer rows, gate/auto-start
+#     the optimizer (DATA_INGESTION_CONNECTOR_KINDS, routers/operations.py).
+#   - market_energy_purchase / iot: real price/telemetry ingestion too (this
+#     used to be the production-readiness gap "Connector Studio can register
+#     an endpoint but nothing reads from one yet") but deliberately do NOT
+#     gate/auto-start — only an explicit database/data_table connection does
+#     that, by the same explicit request that narrowed the gate.
 # ---------------------------------------------------------------------------
 
 
@@ -314,6 +318,47 @@ def _finish_ingest(
     return ConnectorIngestResponse(lineage_id=lineage_id, rows_queued=rows_queued, detail=detail)
 
 
+def _finish_non_gating_ingest(
+    db: Session, ctx: AuthContext, connector: Connector, *, rows_queued: int, lineage_id: str | None, detail: dict | None,
+) -> ConnectorIngestResponse:
+    """Same audit/commit as `_finish_ingest`, deliberately without the
+    `mark_started_if_idle` call — market_energy_purchase/iot connectors
+    ingest real data but must never gate/auto-start the optimizer (only
+    database/data_table do, see DATA_INGESTION_CONNECTOR_KINDS)."""
+    append_audit_event(db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
+                        event_type="connector.ingested",
+                        payload={"connector_id": connector.id, "rows_queued": rows_queued, **({"detail": detail} if detail else {})})
+    db.commit()
+    return ConnectorIngestResponse(lineage_id=lineage_id, rows_queued=rows_queued, detail=detail)
+
+
+LIVE_MARKET_MODEL_VERSION = "live-market-v1"
+
+
+def parse_market_price_entries(payload: object) -> list[tuple[datetime, float]] | None:
+    """A market_energy_purchase connector's ingest contract: a bare JSON
+    array, or `{"prices": [...]}`, of `{"timestamp": ISO8601,
+    "price_per_mwh": number}` objects. Returns `None` if `payload` isn't
+    even array-shaped (a 400 to the caller); a malformed individual entry is
+    silently skipped rather than failing the whole batch (matches every
+    other row-level ingestion path in this codebase — a bad row shouldn't
+    sink an otherwise-valid feed). Pulled out of `ingest_connector` as a
+    pure function so it's testable without a DB, HTTP call, or FastAPI
+    request context."""
+    entries = payload.get("prices", payload) if isinstance(payload, dict) else payload
+    if not isinstance(entries, list):
+        return None
+    parsed: list[tuple[datetime, float]] = []
+    for entry in entries:
+        try:
+            valid_time = datetime.fromisoformat(str(entry["timestamp"]).replace("Z", "+00:00"))
+            price = float(entry["price_per_mwh"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        parsed.append((valid_time, price))
+    return parsed
+
+
 @router.post("/{connector_id}/ingest", response_model=ConnectorIngestResponse)
 def ingest_connector(
     connector_id: str,
@@ -324,10 +369,80 @@ def ingest_connector(
     connector = db.execute(select(Connector).where(Connector.id == connector_id)).scalar_one_or_none()
     if connector is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "connector not found")
-    if connector.kind not in ("data_table", "database"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"kind={connector.kind!r} is registration/reachability-test only — only data_table/database connectors ingest")
+    if connector.kind not in ("data_table", "database", "market_energy_purchase", "iot"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"kind={connector.kind!r} is registration/reachability-test only (scada dispatch always goes through ot-gateway-sim, never a connector, by design)")
     if connector.status != "active":
         raise HTTPException(status.HTTP_409_CONFLICT, f"connector must be active to ingest (currently {connector.status}) — test then activate it first")
+
+    if connector.kind in ("market_energy_purchase", "iot"):
+        ssrf_result = check_outbound_url(connector.endpoint_url)
+        if not ssrf_result.allowed:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"endpoint rejected by egress policy: {ssrf_result.reason}")
+
+        import httpx
+
+        try:
+            with httpx.Client(timeout=connector.timeout_seconds) as client:
+                resp = client.get(connector.endpoint_url, headers=connector.headers)
+                resp.raise_for_status()
+                payload = resp.json()
+        except httpx.HTTPError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"could not fetch {connector.endpoint_url}: {exc}") from exc
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"endpoint did not return valid JSON: {exc}") from exc
+
+        if connector.kind == "market_energy_purchase":
+            # Expected shape: a bare array, or {"prices": [...]}, of
+            # {"timestamp": ISO8601, "price_per_mwh": number} objects — a
+            # small, documented contract (docs/DEPLOYMENT.md A9a) any real
+            # market-data provider's response can be adapted to in front of
+            # this connector. Written as a real Forecast series (variable=
+            # "price") for every grid_interconnection asset, so the next
+            # decision cycle picks it up in place of the synthetic price
+            # curve for any point this series actually covers.
+            parsed_entries = parse_market_price_entries(payload)
+            if parsed_entries is None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "expected a JSON array of {timestamp, price_per_mwh}, or {\"prices\": [...]}")
+
+            grid_assets = db.execute(select(Asset).where(Asset.tenant_id == ctx.tenant_id, Asset.asset_type == "grid_interconnection")).scalars().all()
+            if not grid_assets:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "no grid_interconnection asset exists for this tenant to attach a price forecast to")
+
+            now = datetime.now(timezone.utc)
+            rows_queued = 0
+            for valid_time, price in parsed_entries:
+                for asset in grid_assets:
+                    db.add(Forecast(
+                        tenant_id=ctx.tenant_id, site_id=asset.site_id, asset_id=asset.id, variable="price",
+                        issue_time=now, valid_time=valid_time, quantile=0.5, value=price, unit="GBP/MWh",
+                        model_version=LIVE_MARKET_MODEL_VERSION, is_fallback=False,
+                    ))
+                    rows_queued += 1
+            if rows_queued == 0:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "no valid entries found (expected timestamp + price_per_mwh on each)")
+            db.flush()
+            return _finish_non_gating_ingest(
+                db, ctx, connector, rows_queued=rows_queued, lineage_id=None,
+                detail={"status": "ingested", "table": "live price forecast", "model_version": LIVE_MARKET_MODEL_VERSION},
+            )
+
+        # kind == "iot": the identical generic asset_id/metric/event_time/
+        # value/unit shape a file upload or data_table connector accepts —
+        # any smart-meter/sensor platform's export can be pointed at this
+        # once adapted to that shape.
+        import json as _json
+
+        try:
+            readings = parse_telemetry_file("iot-connector.json", _json.dumps(payload).encode("utf-8"))
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        if not readings:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "no valid rows found (expected columns: asset_id, metric, event_time, value, unit)")
+
+        from reo_common.events import EventBus
+
+        lineage_id = publish_readings(EventBus(), ctx.tenant_id, readings, lineage_id=f"connector:{connector.id}")
+        return _finish_non_gating_ingest(db, ctx, connector, rows_queued=len(readings), lineage_id=lineage_id, detail=None)
 
     if connector.kind == "database":
         table_name = body.table_name or (connector.schema_mapping or {}).get("table_name")

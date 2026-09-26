@@ -877,3 +877,45 @@ class AuditEvent(Base):
 # level (auditors/platform admins must be able to query it broadly under
 # their own RBAC checks); application code enforces tenant filtering for
 # non-platform roles at the API layer instead.
+
+
+class PlatformSettings(Base):
+    """One row per tenant, editable from the dashboard's Configuration
+    Studio (`manage:settings`) — the runtime-configurable knobs behind the
+    production-readiness punch list: live weather feed, the model gateway's
+    circuit breaker, and whether SSO login is enabled for this tenant.
+    Deliberately not env-var-only: every field here can be changed by a
+    tenant admin without a redeploy, and every change is audit-logged like
+    any other governance action on this platform."""
+
+    __tablename__ = "platform_settings"
+    __table_args__ = (UniqueConstraint("tenant_id", name="uq_platform_settings_tenant"),)
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = tenant_fk()
+
+    # Live weather feed (policy/forecast.py) — replaces the synthetic
+    # diurnal solar/wind curves with real Open-Meteo forecast data for the
+    # configured site when enabled. No API key needed (Open-Meteo's forecast
+    # API is free and keyless), so this is genuinely usable out of the box.
+    live_weather_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    weather_site_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    weather_site_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # Model gateway resilience (guardrails/circuit_breaker.py)
+    gateway_circuit_breaker_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    gateway_timeout_seconds: Mapped[float] = mapped_column(Float, default=30.0)
+    gateway_failure_threshold: Mapped[int] = mapped_column(Integer, default=3)
+    gateway_cooldown_seconds: Mapped[int] = mapped_column(Integer, default=60)
+
+    # Identity provider — the OIDC issuer/client itself is one shared
+    # deployment-wide config (reo_common.config.Settings.oidc_*, pointed at
+    # the bundled Keycloak realm locally); this toggle is what actually
+    # lets this tenant's users hit the "Log in with SSO" path.
+    sso_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    updated_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+register_tenant_scoped(PlatformSettings)

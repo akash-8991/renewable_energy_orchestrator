@@ -22,6 +22,8 @@ from datetime import datetime, timedelta, timezone
 from actions_builder import AssetRef, build_actions_for_step
 from document_constraints import apply_capacity_derates
 from forecast import generate_and_persist_forecasts
+from live_weather import fetch_live_weather
+from reo_common.platform_settings import get_or_create_platform_settings
 from policy.engine.autonomy import autonomous_execution_allowed, resolve_autonomy_mode
 from reo_common.config import get_settings
 from database.connection import SessionLocal, break_glass_cross_tenant
@@ -109,7 +111,11 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             # step 2: forecasts — `now` is passed through unchanged so the
             # later lookup-by-issue_time query matches exactly (see
             # forecast.py's comment on why this must not be recomputed)
-            generate_and_persist_forecasts(db, tenant_id, assets, HORIZON_HOURS, STEP_HOURS, now)
+            platform_settings = get_or_create_platform_settings(db, tenant_id)
+            weather = None
+            if platform_settings.live_weather_enabled and platform_settings.weather_site_lat is not None and platform_settings.weather_site_lon is not None:
+                weather = fetch_live_weather(platform_settings.weather_site_lat, platform_settings.weather_site_lon)
+            generate_and_persist_forecasts(db, tenant_id, assets, HORIZON_HOURS, STEP_HOURS, now, weather)
             db.commit()
             n_steps = int(HORIZON_HOURS / STEP_HOURS)
 

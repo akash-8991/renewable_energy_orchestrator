@@ -117,12 +117,44 @@ services:
     environment:
       <<: *python-env
       S3_PUBLIC_ENDPOINT_URL: http://localhost:9000  # browsers/curl on the host use this; container-to-container S3 calls still use S3_ENDPOINT_URL=http://seaweedfs:8333
+      # Real OIDC IdP (see the keycloak service below) — OIDC_ISSUER is
+      # container-network (server-to-server token exchange/JWKS),
+      # OIDC_AUTHORIZE_URL_PUBLIC is host-reachable (the browser's redirect
+      # target), matching this file's S3 public/private URL split for the
+      # same reason. Client secret is a dev-only value matching
+      # keycloak-init/realm-export.json — never used outside local/demo.
+      OIDC_ISSUER: http://keycloak:8080/realms/reo
+      OIDC_AUTHORIZE_URL_PUBLIC: http://localhost:8081/realms/reo/protocol/openid-connect/auth
+      OIDC_CLIENT_ID: reo-platform
+      OIDC_CLIENT_SECRET: reo-platform-secret
+      OIDC_REDIRECT_URI: http://localhost:8000/auth/sso/callback
+      FRONTEND_BASE_URL: http://localhost:5173
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
     ports: ["127.0.0.1:8000:8000"]
     volumes: ["../../data:/data:ro"]
+
+  # Real external OIDC identity provider (production-readiness gap:
+  # "authlib OIDC client wired but never tested against a real IdP").
+  # Keycloak is a genuine, spec-compliant, widely-deployed IdP — not a mock
+  # — so a login through it exercises the actual authorization-code
+  # redirect, token exchange, and JWKS-verified id_token any real IdP
+  # integration needs. `--import-realm` provisions the "reo" realm, the
+  # "reo-platform" client, and one demo user fresh on every start from
+  # keycloak-init/realm-export.json, so this needs no manual console setup
+  # and no persistent volume. Not in any other service's `depends_on` — SSO
+  # is opt-in (Configuration Studio's sso_enabled) and must never block the
+  # rest of the stack from starting.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports: ["127.0.0.1:8081:8080"]  # host-reachable — the browser is redirected here to log in
+    volumes: ["./keycloak-init:/opt/keycloak/data/import:ro"]
 
   optimizer-worker:
     build: { context: ../.., dockerfile: platform/policy/Dockerfile }

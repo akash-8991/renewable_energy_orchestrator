@@ -11,6 +11,15 @@ lead time — a legitimate, well-established forecasting *baseline*
 regardless), just not a trained model. `model_version` is stamped
 "baseline-v1" so a real trained model can be swapped in later without
 changing anything that consumes Forecast rows.
+
+When a tenant enables the live weather feed (Configuration Studio ->
+`PlatformSettings.live_weather_enabled` + a site lat/lon), `live_weather.
+fetch_live_weather()` supplies real Open-Meteo cloud-cover/wind-speed data
+for the horizon, and solar/wind points are derated/computed from that real
+data instead of the synthetic curves — stamped "live-weather-v1" so a
+Decision can tell which forecast points actually used live data versus the
+synthetic baseline. A weather-API failure (or the feed being disabled)
+falls back to the synthetic model with no special-casing by the caller.
 """
 
 from __future__ import annotations
@@ -22,7 +31,10 @@ from datetime import datetime, timedelta, timezone
 
 from models.canonical import Asset, Forecast
 
+from live_weather import LiveWeatherForecast
+
 MODEL_VERSION = "baseline-v1"
+LIVE_WEATHER_MODEL_VERSION = "live-weather-v1"
 
 
 @dataclass
@@ -31,6 +43,7 @@ class ForecastPoint:
     quantile: float
     value: float
     unit: str
+    used_live_weather: bool = False
 
 
 def _solar_diurnal_factor(hour: float) -> float:
@@ -50,10 +63,14 @@ def _wind_power_factor(speed_ms: float) -> float:
 QUANTILES = (0.1, 0.5, 0.9)
 
 
-def forecast_asset(asset: Asset, horizon_hours: int, step_hours: float, now: datetime) -> list[ForecastPoint]:
+def forecast_asset(
+    asset: Asset, horizon_hours: int, step_hours: float, now: datetime,
+    weather: LiveWeatherForecast | None = None,
+) -> list[ForecastPoint]:
     """Generate quantile forecasts for one asset over the horizon. Solar and
-    wind get physically-grounded diurnal/curve-based means; demand gets a
-    daily-shape baseline; other asset types return no forecast (their
+    wind get physically-grounded diurnal/curve-based means (or, when `weather`
+    is supplied, real cloud-cover/wind-speed data for that hour); demand gets
+    a daily-shape baseline; other asset types return no forecast (their
     telemetry is treated as directly observed, not forecast)."""
     points: list[ForecastPoint] = []
     n_steps = int(horizon_hours / step_hours)
@@ -64,14 +81,30 @@ def forecast_asset(asset: Asset, horizon_hours: int, step_hours: float, now: dat
         lead_hours = step * step_hours
         # uncertainty widens with lead time — a simple, defensible growth curve
         uncertainty_frac = min(0.6, 0.05 + 0.02 * lead_hours)
+        hourly_weather = weather.at(valid_time) if weather else None
+        used_live_weather = False
 
         if asset.asset_type == "solar":
-            mean_kw = asset.rated_capacity_kw * _solar_diurnal_factor(hour) * 0.92
+            if hourly_weather is not None:
+                # real forecasted cloud cover derates the same physically-
+                # required day/night diurnal shape (cloud cover alone can't
+                # tell day from night) — a lighter, more realistic overcast
+                # penalty than a flat linear one, since even heavy cloud
+                # still passes diffuse irradiance.
+                clear_sky_factor = 1 - 0.75 * (hourly_weather.cloud_cover_pct / 100) ** 1.5
+                mean_kw = asset.rated_capacity_kw * _solar_diurnal_factor(hour) * clear_sky_factor * 0.92
+                used_live_weather = True
+            else:
+                mean_kw = asset.rated_capacity_kw * _solar_diurnal_factor(hour) * 0.92
             unit = "kW"
         elif asset.asset_type == "wind":
-            # seasonal-naive wind speed proxy: mild diurnal variation around a base speed
-            base_speed = 8.0 + 1.5 * math.sin(math.pi * hour / 12)
-            mean_kw = asset.rated_capacity_kw * _wind_power_factor(base_speed) * 0.9
+            if hourly_weather is not None:
+                mean_kw = asset.rated_capacity_kw * _wind_power_factor(hourly_weather.wind_speed_ms) * 0.9
+                used_live_weather = True
+            else:
+                # seasonal-naive wind speed proxy: mild diurnal variation around a base speed
+                base_speed = 8.0 + 1.5 * math.sin(math.pi * hour / 12)
+                mean_kw = asset.rated_capacity_kw * _wind_power_factor(base_speed) * 0.9
             unit = "kW"
         elif asset.asset_type == "consumer":
             base = 0.5 + 0.3 * math.sin(math.pi * (hour - 7) / 12) ** 2
@@ -89,13 +122,14 @@ def forecast_asset(asset: Asset, horizon_hours: int, step_hours: float, now: dat
             else:
                 z = -1.2816 if q == 0.1 else 1.2816  # approx 10th/90th percentile of a normal
                 value = max(0.0, mean_kw * (1 + z * uncertainty_frac)) if unit != "GBP/MWh" else mean_kw * (1 + z * uncertainty_frac)
-            points.append(ForecastPoint(valid_time=valid_time, quantile=q, value=value, unit=unit))
+            points.append(ForecastPoint(valid_time=valid_time, quantile=q, value=value, unit=unit, used_live_weather=used_live_weather))
 
     return points
 
 
 def generate_and_persist_forecasts(
-    db, tenant_id: str, assets: list[Asset], horizon_hours: int, step_hours: float, now: datetime
+    db, tenant_id: str, assets: list[Asset], horizon_hours: int, step_hours: float, now: datetime,
+    weather: LiveWeatherForecast | None = None,
 ) -> str:
     # `now` MUST be passed in by the caller (the decision cycle's own
     # snapshot timestamp), not computed here — this is what issue_time gets
@@ -111,7 +145,7 @@ def generate_and_persist_forecasts(
         if asset.asset_type not in ("solar", "wind", "consumer", "grid_interconnection"):
             continue
         variable = {"solar": "solar", "wind": "wind", "consumer": "demand", "grid_interconnection": "price"}[asset.asset_type]
-        for point in forecast_asset(asset, horizon_hours, step_hours, now):
+        for point in forecast_asset(asset, horizon_hours, step_hours, now, weather):
             rows.append(
                 Forecast(
                     tenant_id=tenant_id,
@@ -123,7 +157,7 @@ def generate_and_persist_forecasts(
                     quantile=point.quantile,
                     value=point.value,
                     unit=point.unit,
-                    model_version=MODEL_VERSION,
+                    model_version=LIVE_WEATHER_MODEL_VERSION if point.used_live_weather else MODEL_VERSION,
                     is_fallback=False,
                 )
             )

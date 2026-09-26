@@ -33,6 +33,7 @@ from typing import Callable, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from .config import get_settings
+from guardrails.circuit_breaker import ModelCallCircuitBreaker
 from guardrails.rate_limit import ModelCallRateLimiter
 
 logger = logging.getLogger("reo.model_gateway")
@@ -105,6 +106,14 @@ class ModelGateway(ABC):
     #: directly, same pattern as `on_call_record`.
     rate_limiter: "ModelCallRateLimiter | None" = None
 
+    #: Set by a caller with a tenant's `PlatformSettings` row in hand (a
+    #: `guardrails.circuit_breaker.ModelCallCircuitBreaker`) — checked before
+    #: every provider call, and used to wrap `_raw_call` with a timeout, so a
+    #: slow/down provider degrades a decision cycle gracefully instead of
+    #: just running long. Left unset by default (no behavior change for
+    #: callers that never opt in, and zero overhead for `MockModelGateway`).
+    circuit_breaker: "ModelCallCircuitBreaker | None" = None
+
     @abstractmethod
     def _raw_call(
         self,
@@ -146,6 +155,19 @@ class ModelGateway(ABC):
                     self.on_call_record(record)
                 raise RateLimitExceeded(reason or f"{agent}: rate limit exceeded")
 
+        if self.circuit_breaker is not None:
+            allowed, reason = self.circuit_breaker.allow()
+            if not allowed:
+                record = ModelCallRecord(
+                    agent=agent, tenant_id=tenant_id, correlation_id=correlation_id,
+                    provider=self.provider_name, model=getattr(self, "model_name", "unknown"),
+                    latency_ms=0.0, schema_valid=False, retried=False, error=f"circuit_open: {reason}",
+                )
+                logger.warning("model_call_circuit_open", extra={"record": record.model_dump()})
+                if self.on_call_record:
+                    self.on_call_record(record)
+                raise GatewayError(reason or f"{agent}: circuit breaker open")
+
         schema = response_model.model_json_schema()
         schema_name = response_model.__name__
 
@@ -161,13 +183,23 @@ class ModelGateway(ABC):
         last_result: RawCallResult | None = None
         for attempt in range(2):
             try:
-                last_result = self._raw_call(
-                    system_prompt=full_system_prompt,
-                    user_content=user_content,
-                    json_schema=schema,
-                    schema_name=schema_name,
-                    images=images,
-                )
+                if self.circuit_breaker is not None:
+                    last_result = self.circuit_breaker.call_with_timeout(
+                        self._raw_call,
+                        system_prompt=full_system_prompt,
+                        user_content=user_content,
+                        json_schema=schema,
+                        schema_name=schema_name,
+                        images=images,
+                    )
+                else:
+                    last_result = self._raw_call(
+                        system_prompt=full_system_prompt,
+                        user_content=user_content,
+                        json_schema=schema,
+                        schema_name=schema_name,
+                        images=images,
+                    )
                 parsed = response_model.model_validate_json(last_result.raw_json)
                 latency_ms = (time.perf_counter() - start) * 1000
                 record = ModelCallRecord(
@@ -185,10 +217,14 @@ class ModelGateway(ABC):
                 logger.info("model_call", extra={"record": record.model_dump()})
                 if self.on_call_record:
                     self.on_call_record(record)
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_success()
                 return parsed, record
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
                 retried = True
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 continue
             except Exception as exc:
                 # Any provider-level call failure — billing/quota (402),
@@ -208,6 +244,8 @@ class ModelGateway(ABC):
                 # agent; it just never got the chance to.
                 last_error = exc
                 retried = True
+                if self.circuit_breaker is not None:
+                    self.circuit_breaker.record_failure()
                 continue
 
         latency_ms = (time.perf_counter() - start) * 1000

@@ -10,6 +10,7 @@ from .routers import (
     admin,
     audit,
     auth,
+    configuration,
     connectors,
     customers,
     decisions,
@@ -73,3 +74,4 @@ app.include_router(actions.router)
 app.include_router(observability.router)
 app.include_router(customers.router)
 app.include_router(operations.router)
+app.include_router(configuration.router)
