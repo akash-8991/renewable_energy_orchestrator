@@ -40,3 +40,22 @@ def quarantine_payload(kind: str, payload: dict, *, reason: str) -> str:
         return ""
     log.info("quarantined %s payload: %s (reason=%s)", kind, key, reason)
     return key
+
+
+def quarantine_raw_file(kind: str, content: bytes, *, filename: str, reason: str) -> str:
+    """Like quarantine_payload but for raw file bytes rather than a JSON-
+    serializable payload — used for an unrecognized upload awaiting a
+    human's mapping-proposal review (backend/app/ingestion/
+    generic_table_mapper.py), where the original bytes need to be
+    re-fetched later to actually ingest it once approved. Unlike
+    quarantine_payload, failures here raise rather than degrading to a log
+    line: without the stored bytes, approving the proposal later would be
+    impossible, so the proposal must not be created if this fails."""
+    key = f"{kind}/{datetime.now(timezone.utc):%Y/%m/%d}/{uuid.uuid4().hex}-{filename}"
+    _client().put_object(Bucket=settings.s3_bucket_quarantine, Key=key, Body=content, ContentType="application/octet-stream")
+    log.info("quarantined %s file: %s (reason=%s)", kind, key, reason)
+    return key
+
+
+def fetch_quarantined_file(key: str) -> bytes:
+    return _client().get_object(Bucket=settings.s3_bucket_quarantine, Key=key)["Body"].read()

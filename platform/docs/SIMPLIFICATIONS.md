@@ -54,6 +54,57 @@ documented limits rather than silent gaps:
   other agent. Verified via the mock gateway (schema-valid extraction, correct plumbing end to
   end: render → extract → persist → audit → apply → optimizer derate, confirmed against live DB
   data) and via unit tests; not verified against a real photographed document with real API calls.
+- **`.docx` is read as text, not rendered to an image.** There's no natural "page image" for a
+  Word doc the way there is for a scan/photo, so `extract_text()` pulls its paragraphs and table
+  cells (in document order, via `python-docx`) and hands that to the same agent/schema as a
+  text-only model call instead of a vision one. Legacy `.doc` (pre-2007 binary Word) is not
+  supported — it needs a much heavier dependency (LibreOffice headless conversion) that wasn't
+  added since no real source files arrived in that format.
+
+## Known tracked item: generic tabular-file mapping (arbitrary csv/json/xlsx structure)
+
+The reference dataset's 8 files and the fixed asset_id/metric/event_time/value/unit shape cover
+known structures; a genuinely arbitrary file (a client's own SCADA export, a spreadsheet with
+different column names) previously just 400'd with "no valid rows found". `POST /ingestion/files`
+now falls through to a mapping agent (`backend/app/ingestion/generic_table_mapper.py`) as a last
+resort: it's shown the file's column headers, a few sample rows, and the tenant's real asset
+list, and proposes a role for each column (a timestamp, an asset/customer reference, or a named
+metric/field) — never applied on its own say-so. A human reviews the proposal in Document Intake
+(`GET /ingestion/mapping-proposals`, `POST .../{id}/{approve,reject}`) before anything is
+actually ingested, consistent with the platform's non-negotiable "agents produce evidence, never
+commands" rule.
+
+**The actual token-reduction mechanism, and why it isn't a semantic cache.** Once a human approves
+a mapping for a given column layout (a hash of the sorted, lowercased column names —
+`column_signature()`), that decision is stored as a `TableMappingRule` and reused deterministically
+for every future upload with the identical layout — verified live: a second file with the same 4
+columns as an approved one ingested immediately with `mapping_rule_reused: true` in the response
+and no further model call. This is exact-match reuse of a human-confirmed decision, not a
+similarity/embedding cache over merely-similar files — deliberately, since guessing that a *new*
+file is "close enough" to reuse a past mapping for is exactly the kind of silent misapplication
+the platform's evidence-not-commands philosophy exists to prevent. `times_reused` on each rule
+makes the established patterns directly visible (queryable via the table, not yet surfaced in a
+dedicated UI), which is the "patterns for decisions are clearly identifiable" property this was
+built for.
+
+Known limits, stated rather than hidden:
+- **Verified with a hand-constructed mapping, not a real model call**, for the same reason as
+  D3 above — the configured OpenRouter key ran out of credits mid-session (a real, live 402 from
+  the provider, which the existing `GatewayError` fail-closed handling caught and surfaced
+  correctly). `apply_mapping()`'s actual data transformation (asset-name resolution, wide-to-long
+  reshaping, customer-field updates, the full approve→ingest→cache-reuse round trip through the
+  real API) was verified end-to-end against the live stack; the *quality* of the agent's own
+  column-role judgment was only verified via the mock gateway's schema-shape check, not a real
+  reasoning pass.
+- **Telemetry mapping requires an explicit per-row asset reference column.** A portfolio-wide file
+  with no per-asset breakdown (like the reference dataset's own grid/market/weather files) isn't
+  this agent's job — that's what the reference-dataset path (`hackathon_dataset.py`) already
+  handles with its own capacity-weighted distribution logic. The mapping agent's system prompt
+  explicitly tells it to report `unrecognized` rather than invent a distribution when there's no
+  asset column.
+- **Asset/customer reference resolution is exact, case-insensitive string matching only** — no
+  fuzzy matching. A row whose reference doesn't match a real asset/customer name exactly is
+  skipped and counted (`skipped_unmatched_asset_ref`/`skipped_unknown_customer`), never guessed.
 
 ## Known tracked item: Connector Studio is a registration surface for four of six kinds
 

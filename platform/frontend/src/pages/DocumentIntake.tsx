@@ -105,7 +105,7 @@ function ApplyConstraintForm({ doc, assets, onDone }: { doc: DocumentIntakeRow; 
   );
 }
 
-const DOCUMENT_SUFFIXES = [".pdf", ".png", ".jpg", ".jpeg"];
+const DOCUMENT_SUFFIXES = [".pdf", ".png", ".jpg", ".jpeg", ".docx"];
 const TABLE_SUFFIXES = [".csv", ".json", ".xlsx", ".xlsm"];
 const ALL_SUFFIXES = [...DOCUMENT_SUFFIXES, ...TABLE_SUFFIXES];
 
@@ -118,6 +118,90 @@ interface FileUploadResult {
   filename: string;
   status: "ok" | "error";
   message: string;
+}
+
+interface MappingProposal {
+  id: string;
+  filename: string;
+  file_kind: string;
+  confidence: number;
+  reasoning: string;
+  column_roles: Record<string, string>;
+  sample_preview: { headers: string[]; rows: Record<string, any>[] };
+  status: string;
+  created_at: string;
+}
+
+// Column roles as the agent proposed them (generic_table_mapper.py):
+// event_time/asset_ref/customer_ref/ignore, or "metric:<name>:<unit>" /
+// "customer_field:<name>" — rendered compactly rather than as raw strings.
+function roleLabel(role: string): string {
+  if (role.startsWith("metric:")) {
+    const [, name, unit] = role.split(":");
+    return `metric: ${name}${unit ? ` (${unit})` : ""}`;
+  }
+  if (role.startsWith("customer_field:")) return `field: ${role.split(":")[1]}`;
+  return role;
+}
+
+function MappingProposalsSection() {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: proposals } = useQuery<MappingProposal[]>({
+    queryKey: ["mapping-proposals"],
+    queryFn: async () => (await api.get("/ingestion/mapping-proposals")).data,
+    refetchInterval: 15000,
+  });
+  const pending = (proposals || []).filter((p) => p.status === "proposed");
+
+  const approve = useMutation({
+    mutationFn: async (id: string) => (await api.post(`/ingestion/mapping-proposals/${id}/approve`)).data,
+    onSuccess: () => { setError(null); qc.invalidateQueries({ queryKey: ["mapping-proposals"] }); qc.invalidateQueries({ queryKey: ["operations-status"] }); },
+    onError: (err: any) => setError(err?.response?.data?.detail || "failed to approve"),
+  });
+  const reject = useMutation({
+    mutationFn: async (id: string) => (await api.post(`/ingestion/mapping-proposals/${id}/reject`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["mapping-proposals"] }),
+  });
+
+  if (pending.length === 0) return null;
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h3>Data mapping proposals awaiting review</h3>
+      <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+        These files didn't match a known shape, so an agent proposed how to map their columns onto real
+        telemetry/customer data instead of erroring outright. Nothing has been ingested yet — review the mapping
+        below, then approve or reject. An approved mapping is remembered: the next file with this same column
+        layout is ingested directly, with no further agent call.
+      </p>
+      {error && <div className="error-banner" style={{ marginTop: 8 }}>{error}</div>}
+      {pending.map((p) => (
+        <div key={p.id} style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+          <div className="row-between">
+            <strong>{p.filename}</strong>
+            <div className="row" style={{ gap: 6 }}>
+              <Badge text={p.file_kind} />
+              <Badge text={`${Math.round(p.confidence * 100)}% confidence`} />
+            </div>
+          </div>
+          <p style={{ fontSize: 13, margin: "6px 0" }}>{p.reasoning}</p>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+            {Object.entries(p.column_roles).map(([col, role]) => `${col} → ${roleLabel(role)}`).join("  ·  ")}
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <button onClick={() => approve.mutate(p.id)} disabled={approve.isPending || reject.isPending}>
+              {approve.isPending ? "Approving..." : "Approve & ingest"}
+            </button>
+            <button className="danger" onClick={() => reject.mutate(p.id)} disabled={approve.isPending || reject.isPending}>
+              Reject
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function DocumentIntake() {
@@ -153,9 +237,11 @@ export default function DocumentIntake() {
           if (TABLE_SUFFIXES.includes(suffix)) {
             const { data } = await api.post("/ingestion/files", form, { headers: { "Content-Type": "multipart/form-data" } });
             const detail = data.detail;
-            const message = detail && detail.status !== "ingested"
-              ? (detail.message || `${detail.table}: ${detail.status}`)
-              : `${data.rows_queued} row(s)/reading(s) processed${detail?.table ? ` for ${detail.table}` : ""}`;
+            const message = data.proposal_id
+              ? `structure not recognized — proposed as a ${detail?.file_kind} mapping (${Math.round((detail?.confidence || 0) * 100)}% confidence), review below`
+              : detail && detail.status !== "ingested"
+                ? (detail.message || `${detail.table}: ${detail.status}`)
+                : `${data.rows_queued} row(s)/reading(s) processed${detail?.table ? ` for ${detail.table}` : ""}`;
             outcomes.push({ filename: file.name, status: "ok", message });
           } else if (DOCUMENT_SUFFIXES.includes(suffix)) {
             const { data } = await api.post("/ingestion/documents", form, { headers: { "Content-Type": "multipart/form-data" } });
@@ -174,6 +260,7 @@ export default function DocumentIntake() {
       if (fileInput.current) fileInput.current.value = "";
       qc.invalidateQueries({ queryKey: ["document-intakes"] });
       qc.invalidateQueries({ queryKey: ["operations-status"] });
+      qc.invalidateQueries({ queryKey: ["mapping-proposals"] });
     },
   });
 
@@ -202,7 +289,8 @@ export default function DocumentIntake() {
         <input ref={fileInput} type="file" accept={ALL_SUFFIXES.join(",")} multiple />
         <p className="muted" style={{ fontSize: 11, marginTop: 6, marginBottom: 0 }}>
           Select multiple files at once — each is routed automatically: {TABLE_SUFFIXES.join("/")} as structured
-          telemetry, {DOCUMENT_SUFFIXES.join("/")} through vision extraction.
+          data (a recognized shape ingests immediately; an unrecognized one is proposed for review below instead
+          of erroring), {DOCUMENT_SUFFIXES.join("/")} read directly (image formats and PDF via vision, .docx as text).
         </p>
         <div style={{ marginTop: 10 }}>
           <button
@@ -213,6 +301,8 @@ export default function DocumentIntake() {
           </button>
         </div>
       </div>
+
+      <MappingProposalsSection />
 
       {isLoading && <div className="empty-state">Loading...</div>}
       {documents && documents.length === 0 && <div className="empty-state">No documents ingested yet.</div>}

@@ -725,6 +725,67 @@ class DocumentIntake(Base):
 register_tenant_scoped(DocumentIntake)
 
 
+class TableMappingRule(Base):
+    """An approved, reusable mapping from one arbitrary tabular file shape
+    (identified by `column_signature` — a hash of its sorted lowercased
+    column names) onto the platform's canonical shapes (telemetry readings
+    or Customer fields). Created once a human approves a `DataMappingProposal`
+    for a given shape; every later upload with the *same* column signature
+    reuses this rule directly (backend/app/routers/ingestion.py) instead of
+    calling the mapping agent again — the actual token-reduction mechanism:
+    the pattern, once established, is applied deterministically forever
+    after, not re-derived by an LLM call on every repeat upload.
+    """
+
+    __tablename__ = "table_mapping_rules"
+    __table_args__ = (UniqueConstraint("tenant_id", "column_signature", name="uq_table_mapping_rule"),)
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = tenant_fk()
+    column_signature: Mapped[str] = mapped_column(String(64), index=True)
+    file_kind: Mapped[str] = mapped_column(String(20))  # telemetry|customer
+    column_roles: Mapped[dict] = mapped_column(JSONB)  # {"<original column name>": "<role>"} — see hackathon_dataset.py's generic mapper for the role vocabulary
+    sample_filename: Mapped[str] = mapped_column(String(300))
+    created_by: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
+    times_reused: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+register_tenant_scoped(TableMappingRule)
+
+
+class DataMappingProposal(Base):
+    """A pending, agent-proposed mapping for a tabular file shape the
+    platform hasn't seen before (not the generic asset_id/metric/event_time/
+    value/unit shape, not one of the reference dataset's 8 known filenames).
+    Evidence only, same rule as DocumentIntake: a human reviews and approves
+    it (which both ingests this file's rows and creates the reusable
+    TableMappingRule above) or rejects it — the agent never writes to
+    Asset/Customer data on its own say-so.
+    """
+
+    __tablename__ = "data_mapping_proposals"
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = tenant_fk()
+    filename: Mapped[str] = mapped_column(String(300))
+    column_signature: Mapped[str] = mapped_column(String(64), index=True)
+    file_kind: Mapped[str] = mapped_column(String(20))  # telemetry|customer|unrecognized
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    reasoning: Mapped[str] = mapped_column(Text, default="")
+    column_roles: Mapped[dict] = mapped_column(JSONB, default=dict)
+    sample_preview: Mapped[dict] = mapped_column(JSONB, default=dict)  # first few rows only, for a human to sanity-check the proposal against
+    quarantine_key: Mapped[str] = mapped_column(String(300))  # S3 key (quarantine bucket) holding the full original file, fetched again on approval
+    status: Mapped[str] = mapped_column(String(20), default="proposed")  # proposed|applied|rejected
+    created_by: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_data_mapping_proposals_tenant_created", "tenant_id", "created_at"),)
+
+
+register_tenant_scoped(DataMappingProposal)
+
+
 # ---------------------------------------------------------------------------
 # Agent observability & evaluation (MODEL_ADMIN role's own workspace — the
 # `manage:model_registry`/`manage:model_eval`/`deploy:model` permissions

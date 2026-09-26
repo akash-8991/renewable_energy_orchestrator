@@ -5,12 +5,15 @@ image of a maintenance notice, storm/weather advisory, grid outage notice,
 or inspection report does not decompose into asset_id/metric/value rows at
 all — it has to be *read*.
 
-Each page is rendered to an image and shown to the same `ModelGateway`
-every specialist agent already uses (Claude's vision, tool-forced into a
-strict schema), so a misread page fails closed (`GatewayError`) rather than
-silently fabricating a maintenance window. The extraction is evidence
-only — turning it into a real `Constraint` the optimizer will see is a
-separate, explicit human action (`routers/ingestion.py`'s
+A PDF/PNG/JPG page is rendered to an image and shown to the same
+`ModelGateway` every specialist agent already uses (Claude's vision,
+tool-forced into a strict schema); a `.docx` has no natural "page image" (no
+scan/photo to render), so it's read as plain text instead — same schema,
+same agent, same fail-closed contract, just a text-only model call instead
+of a vision one. Either way a misread document fails closed (`GatewayError`)
+rather than silently fabricating a maintenance window. The extraction is
+evidence only — turning it into a real `Constraint` the optimizer will see
+is a separate, explicit human action (`routers/ingestion.py`'s
 apply-constraint endpoint), consistent with the platform's non-negotiable
 rule that agents produce evidence, never commands.
 """
@@ -29,9 +32,10 @@ from reo_common.model_gateway import ModelGateway, wrap_untrusted
 
 log = logging.getLogger("api.ingestion.document")
 
-SUPPORTED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg"}
+SUPPORTED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".docx"}
 MAX_PAGES = 8
 MAX_DIMENSION_PX = 1568  # Anthropic downsamples above this anyway; render smaller to save tokens/latency
+MAX_DOCX_CHARS = 40_000  # bounds tokens/cost on a pathologically large Word doc; a real notice/report is a page or two
 
 SYSTEM_PROMPT = """You are the Document Intake specialist agent for a renewable energy \
 orchestration platform. You are shown scanned or photographed page image(s) of a single \
@@ -114,10 +118,33 @@ def render_pages(filename: str, content: bytes) -> list[bytes]:
     elif suffix in (".png", ".jpg", ".jpeg"):
         pages = _pages_from_image(content)
     else:
-        raise ValueError(f"unsupported document type: {suffix} (supported: .pdf, .png, .jpg, .jpeg)")
+        raise ValueError(f"unsupported document type: {suffix} (supported: .pdf, .png, .jpg, .jpeg, .docx)")
     if not pages:
         raise ValueError("document had no renderable pages")
     return pages
+
+
+def extract_text(filename: str, content: bytes) -> str:
+    """The text-native counterpart to render_pages() — for a .docx, there is
+    no scan/photo to render, so its actual text (paragraphs + table cells,
+    in document order) is what gets shown to the model instead of an image."""
+    suffix = Path(filename).suffix.lower()
+    if suffix != ".docx":
+        raise ValueError(f"unsupported text document type: {suffix} (supported: .docx)")
+
+    import docx
+
+    document = docx.Document(io.BytesIO(content))
+    parts: list[str] = [p.text for p in document.paragraphs if p.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            if any(cells):
+                parts.append(" | ".join(cells))
+    text = "\n".join(parts).strip()
+    if not text:
+        raise ValueError("document had no extractable text")
+    return text[:MAX_DOCX_CHARS]
 
 
 def extract_document(
@@ -133,5 +160,21 @@ def extract_document(
         agent="document_intake", tenant_id=tenant_id, correlation_id=correlation_id,
         system_prompt=SYSTEM_PROMPT, user_content=user_content,
         response_model=DocumentExtraction, images=images,
+    )
+    return result
+
+
+def extract_document_from_text(
+    gateway: ModelGateway, *, tenant_id: str, correlation_id: str, filename: str, text: str,
+) -> DocumentExtraction:
+    user_content = wrap_untrusted(
+        f"Document filename: {filename}\nExtracted document text follows:\n\n{text}\n\n"
+        "Extract the structured fields from the document text above.",
+        source=f"document-upload:{filename}",
+    )
+    result, _record = gateway.complete_structured(
+        agent="document_intake", tenant_id=tenant_id, correlation_id=correlation_id,
+        system_prompt=SYSTEM_PROMPT, user_content=user_content,
+        response_model=DocumentExtraction,
     )
     return result

@@ -97,7 +97,7 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` (Excel export includes an "Actions" sheet) |
 | Tenant Administration | `GET/POST /admin/users`, `GET/POST /admin/tenants` |
 | Platform Operations | rollups over the above; no dedicated endpoint |
-| Document Intake | Multi-file upload, routed per extension: `POST /ingestion/documents` (.pdf/.png/.jpg/.jpeg, vision) and `POST /ingestion/files` (.csv/.json/.xlsx/.xlsm, structured) — either one auto-starts the tenant if idle (see Portfolio Operations); also `GET /ingestion/documents`, `POST /ingestion/documents/{id}/apply-constraint` |
+| Document Intake | Multi-file upload, routed per extension: `POST /ingestion/documents` (.pdf/.png/.jpg/.jpeg via vision, .docx via extracted text — same agent/schema either way) and `POST /ingestion/files` (.csv/.json/.xlsx/.xlsm) — either one auto-starts the tenant if idle (see Portfolio Operations). `/ingestion/files` tries, in order: the fixed asset_id/metric/event_time/value/unit shape, a recognized reference-dataset filename, an already-approved `TableMappingRule` for this exact column layout (no model call), then the generic mapping agent as a last resort, which produces a `DataMappingProposal` for human review rather than ingesting on its own say-so. Also `GET /ingestion/documents`, `POST /ingestion/documents/{id}/apply-constraint`, `GET /ingestion/mapping-proposals`, `POST /ingestion/mapping-proposals/{id}/{approve,reject}` |
 | — (all pages) | `POST /auth/login`, `GET /auth/me` |
 
 ## Decision cycle (FRD §3.1)
