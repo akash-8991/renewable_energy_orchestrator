@@ -170,17 +170,18 @@ You'll see a line ending `demo login: any email above / password 'Password123!' 
      *different* user activate it (maker-checker — e.g. `tenant.admin` creates, `platform.admin`
      activates), then back on Portfolio Operations click **Start Optimizer** (enabled once
      `has_data_source=true`).
-   - **Document Intake** (top of Portfolio Operations) is a separate, independent ingestion path —
-     uploading a `.csv`/`.json`/`.xlsx` (structured telemetry) or `.pdf`/`.png`/`.jpg`/`.docx` (a
-     document, read via vision or extracted text) really does ingest the data, but by design it no
-     longer auto-starts the optimizer; only the Connector Studio route above does that.
-     `market_energy_purchase`/`iot` connectors also ingest real data (a price forecast series /
-     telemetry — see A9a) but likewise don't count toward this gate; `generic`/`scada` remain
-     registration/reachability-test only (see `ARCHITECTURE.md`).
+   - **Document Intake** (`POST /ingestion/files`/`/ingestion/documents`, API-only — no dashboard
+     page) is a separate, independent ingestion path — uploading a `.csv`/`.json`/`.xlsx`
+     (structured telemetry) or `.pdf`/`.png`/`.jpg`/`.docx` (a document, read via vision or
+     extracted text) really does ingest the data, but by design it no longer auto-starts the
+     optimizer; only the Connector Studio route above does that. See `docs/USAGE_GUIDE.md` §6 for
+     the curl walkthrough. `market_energy_purchase`/`iot` connectors also ingest real data (a price
+     forecast series / telemetry — see A9a) but likewise don't count toward this gate;
+     `generic`/`scada` remain registration/reachability-test only (see `ARCHITECTURE.md`).
 4. Once started, Portfolio Operations fills in with live generation/demand numbers that update
    every few seconds (the built-in `edge-simulator` publishes synthetic telemetry continuously
    regardless of this gate — starting/stopping controls the decision cycle and dashboard display,
-   not the underlying telemetry stream), and the sidebar's 15 workspaces come alive — Decision
+   not the underlying telemetry stream), and the sidebar's 14 workspaces come alive — Decision
    Centre is a good second stop; it fills in with a new entry roughly every 2 minutes as the
    optimizer's decision cycle runs. **Stop Optimizer** on Portfolio Operations returns to idle at
    any time.
@@ -315,8 +316,10 @@ docker compose up -d source-db
 ```
 
 1. **Folder path** — Connector Studio → *+ New connector* → kind **Data table (path/link)** → for
-   "Data path / link" enter a filename from the watched folder, e.g. `03_renewable_generation.csv`
-   (or any other file from the list in A9's table). Test it, activate it as a *different* user
+   "Data path / link" enter just the bare filename, e.g. `03_renewable_generation.csv` (or any
+   other file from the list in A9's table) — **not** your machine's own path to `platform/../data/`
+   (that host path means nothing inside the containers; only the bare filename resolves against
+   the watched folder they're mounted into). Test it, activate it as a *different* user
    (maker-checker), then **Ingest now**.
 2. **Database connection** — kind **Database** → connection string
    `postgresql://reo_source:reo-source-secret@source-db:5432/client_export` → table name e.g.

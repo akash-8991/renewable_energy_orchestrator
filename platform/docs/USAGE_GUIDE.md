@@ -194,9 +194,15 @@ export, a shared drive), rather than a live database connection.
 **Two address forms** for `endpoint_url`:
 - An `http(s)://` URL — fetched fresh on every "Ingest now" (SSRF-checked: no loopback, link-local,
   or cloud-metadata addresses).
-- A filename under the platform's watched local folder (`DATA_WATCH_DIR`, default `/data` — the
-  same folder a background watcher already scans for new files, and the same mount point
-  `docker-compose.yml`'s `../../data:/data` maps to your host's `data/` directory).
+- A **bare filename** already sitting directly inside the platform's watched local folder
+  (`DATA_WATCH_DIR`, default `/data` inside the containers — the same folder a background watcher
+  already scans for new files). On the host this is the `data/` directory next to `platform/`
+  (`docker-compose.yml` mounts it as `../../data:/data`). **Enter just the filename** (e.g.
+  `03_renewable_generation.csv`) — **not** your machine's own path to that folder (e.g.
+  `/Users/you/project/data`). That host path means nothing inside the containers; pasting it
+  produces a `"... was not found under the watched data folder"` error even though the folder
+  genuinely exists on your machine, because the platform can only ever look inside its own mounted
+  `/data`, joined with whatever you typed.
 
 ```bash
 curl -X POST http://localhost:8000/connectors \
@@ -205,15 +211,16 @@ curl -X POST http://localhost:8000/connectors \
 ```
 
 Same test/activate/ingest sequence as §5. A row with an unrecognized column layout doesn't fail —
-it goes through the generic-mapping agent (an LLM proposes a column mapping, a human approves it in
-**Document Intake → Mapping proposals**, and the mapping is cached by exact column signature so an
-identical file never needs a second model call — see `docs/SIMPLIFICATIONS.md`'s "generic
-tabular-file mapping" section).
+it goes through the generic-mapping agent (an LLM proposes a column mapping, a human approves it via
+the API — `GET /ingestion/mapping-proposals`, `POST /ingestion/mapping-proposals/{id}/{approve,reject}`,
+no dashboard page for this — and the mapping is cached by exact column signature so an identical
+file never needs a second model call — see `docs/SIMPLIFICATIONS.md`'s "generic tabular-file
+mapping" section).
 
-For structured telemetry files that don't need a connector at all, **Document Intake** accepts
-direct upload (`.csv`/`.json`/`.xlsx`, or `.pdf`/`.png`/`.jpg`/`.docx` for unstructured documents
-read via vision/text extraction) — it ingests real data the same way, it just doesn't unlock Start
-Optimizer on its own (§4).
+Document Intake (`POST /ingestion/files` for structured telemetry, `POST /ingestion/documents` for
+`.pdf`/`.png`/`.jpg`/`.docx` read via vision/text extraction) is a separate, API-only ingestion path
+with no dashboard page — it ingests real data the same way, it just doesn't unlock Start Optimizer
+on its own (§4).
 
 ## 7. Connecting a live weather feed
 
@@ -533,12 +540,16 @@ the dropdown → **Create user**. The new user appears immediately in the "Users
 below the form. This requires `manage:users` (Tenant Admin or Platform Admin) — if you don't see the
 form, your account doesn't have that permission.
 
-**The one exception: creating a brand-new tenant has no UI form.** Provisioning a tenant is a
+**Two genuine exceptions have no UI form at all.** Creating a brand-new tenant is a
 platform-admin-only, break-glass-audited action (`docs/ARCHITECTURE.md`'s tenant-isolation section)
-that this build only exposes as `POST /admin/tenants`. If you want to do this without typing a
-terminal command, open `/docs` (Swagger UI) on your deployment, find `POST /admin/tenants`, click
-**Try it out**, fill in the JSON body fields, and click **Execute** — no curl, still no code, just a
-form in the browser. Everything else in this section has a real sidebar page.
+that this build only exposes as `POST /admin/tenants`. Document Intake (uploading a file/document
+directly, and reviewing/approving a pending mapping proposal from the generic-mapping agent — §6)
+was removed from the sidebar by request and is API-only now too (`POST /ingestion/files`, `POST
+/ingestion/documents`, `GET /ingestion/mapping-proposals`, `POST
+/ingestion/mapping-proposals/{id}/{approve,reject}`). If you want to do either without typing a
+terminal command, open `/docs` (Swagger UI) on your deployment, find the endpoint, click **Try it
+out**, fill in the fields, and click **Execute** — no curl, still no code, just a form in the
+browser. Everything else in this section has a real sidebar page.
 
 ### Connect a backend database or file feed
 
@@ -590,7 +601,7 @@ decisions, requires the Auditor/DPO role). It shows a live status badge while ru
 
 ### Everything else
 
-Approval Inbox, Live Signal Monitor, Action Tickets, Document Intake, Simulation Lab, Agent
+Approval Inbox, Live Signal Monitor, Action Tickets, Simulation Lab, Agent
 Observability, and Platform Operations are all pure dashboard pages too — there's no curl-only
 capability hiding behind any of them. If a page ever shows nothing where you expect a control,
 that's almost always an RBAC permission gap (§14), not a missing feature — the roles/permissions

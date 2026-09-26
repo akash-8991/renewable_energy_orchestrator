@@ -28,6 +28,15 @@ component would sit behind, so swapping one in later is an infrastructure change
 
 ## Known tracked item: document intake (D3 multimodal ingestion)
 
+**API-only, no dashboard page.** The "Document Intake" workspace was removed from the sidebar by
+request — every endpoint below is untouched and still fully functional, just reachable only via the
+API now (`docs/USAGE_GUIDE.md` §6 has the curl walkthrough). One real side effect: the mapping-
+proposal review UI (`GET /ingestion/mapping-proposals`, `POST .../{id}/{approve,reject}` — see the
+"generic tabular-file mapping" section below) lived on this same page and has no replacement
+surface elsewhere, so approving/rejecting a proposal is API-only too now, for both Document Intake
+uploads and a `data_table`/`database` connector's own unrecognized-file-shape ingests (they share
+the same mapping agent and review queue).
+
 `POST /ingestion/documents` reads scanned PDFs/photographed images via the same `ModelGateway`
 vision path every specialist agent uses (`document_ingest.py`), but the following are deliberate,
 documented limits rather than silent gaps:
@@ -69,10 +78,10 @@ different column names) previously just 400'd with "no valid rows found". `POST 
 now falls through to a mapping agent (`backend/app/ingestion/generic_table_mapper.py`) as a last
 resort: it's shown the file's column headers, a few sample rows, and the tenant's real asset
 list, and proposes a role for each column (a timestamp, an asset/customer reference, or a named
-metric/field) — never applied on its own say-so. A human reviews the proposal in Document Intake
-(`GET /ingestion/mapping-proposals`, `POST .../{id}/{approve,reject}`) before anything is
-actually ingested, consistent with the platform's non-negotiable "agents produce evidence, never
-commands" rule.
+metric/field) — never applied on its own say-so. A human reviews the proposal via the API
+(`GET /ingestion/mapping-proposals`, `POST .../{id}/{approve,reject}` — no dashboard page for this,
+see the "document intake" section above) before anything is actually ingested, consistent with the
+platform's non-negotiable "agents produce evidence, never commands" rule.
 
 **The actual token-reduction mechanism, and why it isn't a semantic cache.** Once a human approves
 a mapping for a given column layout (a hash of the sorted, lowercased column names —

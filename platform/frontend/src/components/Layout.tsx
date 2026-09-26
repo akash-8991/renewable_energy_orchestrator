@@ -11,7 +11,6 @@ const NAV = [
   { to: "/actions", label: "Action Tickets" },
   { to: "/connectors", label: "Connector Studio" },
   { to: "/configuration", label: "Configuration Studio" },
-  { to: "/documents", label: "Document Intake" },
   { to: "/policy", label: "Policy Studio" },
   { to: "/simulation", label: "Simulation Lab" },
   { to: "/observability", label: "Agent Observability" },

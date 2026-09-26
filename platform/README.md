@@ -27,7 +27,7 @@ platform/
 ├── backend/          FastAPI HTTP API — ingestion, digital twin, decisions, governance,
 │                      connectors, exports, audit, admin, observability. The dashboard's
 │                      only entry point into the platform.
-├── frontend/          React + TypeScript + Vite dashboard (15 workspaces).
+├── frontend/          React + TypeScript + Vite dashboard (14 workspaces).
 ├── agent/              The 9 specialist LLM agents (doc 07) + their orchestration loop
 │                      (worker.py). Agents only ever produce typed JSON evidence — never a
 │                      command — consumed by policy/ below.
@@ -121,13 +121,14 @@ password `Password123!` (local/demo only — see `database/seed.py`). For the fu
 demo accounts and what each role can do, see **`docs/DEPLOYMENT.md`** (§ A7, "Demo accounts").
 
 A fresh tenant lands on Portfolio Operations **idle** — Start Optimizer only unlocks once an
-active `database` or `data_table` connector exists in Connector Studio (Document Intake uploads
-still ingest real data but no longer unlock it on their own). See `docs/DEPLOYMENT.md` A7 step 3
+active `database` or `data_table` connector exists in Connector Studio (a Document Intake upload
+via the API still ingests real data but no longer unlocks it on their own — see `docs/USAGE_GUIDE.md`
+§6, since there's no dashboard page for this anymore). See `docs/DEPLOYMENT.md` A7 step 3
 and `docs/SIMPLIFICATIONS.md`'s "Portfolio-wide start/stop gate" section.
 
-The dashboard has 15 workspaces (sidebar): Portfolio Operations, Decision Centre, Customers,
+The dashboard has 14 workspaces (sidebar): Portfolio Operations, Decision Centre, Customers,
 Approval Inbox, Live Signal Monitor, Action Tickets, Connector Studio, Configuration Studio,
-Document Intake, Policy Studio, Simulation Lab, Agent Observability, Audit & Exports, Tenant
+Policy Studio, Simulation Lab, Agent Observability, Audit & Exports, Tenant
 Administration, Platform Operations — each role
 sees a different subset per its RBAC permissions (e.g. only `portfolio_manager` can drive
 Simulation Lab; only `tenant_admin` can provision users/tenants or edit Configuration Studio; only

@@ -98,8 +98,22 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` (Excel export includes an "Actions" sheet) |
 | Tenant Administration | `GET/POST /admin/users`, `GET/POST /admin/tenants` |
 | Platform Operations | rollups over the above; no dedicated endpoint |
-| Document Intake | Multi-file upload, routed per extension: `POST /ingestion/documents` (.pdf/.png/.jpg/.jpeg via vision, .docx via extracted text — same agent/schema either way) and `POST /ingestion/files` (.csv/.json/.xlsx/.xlsm) — both ingest real data but deliberately do *not* auto-start the tenant (see Portfolio Operations — only an active `database`/`data_table` connector in Connector Studio does that). `/ingestion/files` tries, in order: the fixed asset_id/metric/event_time/value/unit shape, a recognized reference-dataset filename, an already-approved `TableMappingRule` for this exact column layout (no model call), then the generic mapping agent as a last resort, which produces a `DataMappingProposal` for human review rather than ingesting on its own say-so. Also `GET /ingestion/documents`, `POST /ingestion/documents/{id}/apply-constraint`, `GET /ingestion/mapping-proposals`, `POST /ingestion/mapping-proposals/{id}/{approve,reject}` |
 | — (all pages) | `POST /auth/login`, `GET /auth/me` |
+
+**Document Intake — API-only, no dashboard workspace.** Removed from the sidebar by request; the
+real ingestion endpoints behind it are untouched and still fully functional, just API-only now (see
+`docs/USAGE_GUIDE.md` §6 for the curl walkthrough). Multi-file upload, routed per extension: `POST
+/ingestion/documents` (.pdf/.png/.jpg/.jpeg via vision, .docx via extracted text — same agent/schema
+either way) and `POST /ingestion/files` (.csv/.json/.xlsx/.xlsm) — both ingest real data but
+deliberately do *not* auto-start the tenant (only an active `database`/`data_table` connector in
+Connector Studio does that). `/ingestion/files` tries, in order: the fixed
+asset_id/metric/event_time/value/unit shape, a recognized reference-dataset filename, an
+already-approved `TableMappingRule` for this exact column layout (no model call), then the generic
+mapping agent as a last resort, which produces a `DataMappingProposal` for human review rather than
+ingesting on its own say-so. Also `GET /ingestion/documents`, `POST
+/ingestion/documents/{id}/apply-constraint`, `GET /ingestion/mapping-proposals`, `POST
+/ingestion/mapping-proposals/{id}/{approve,reject}` — this last pair (reviewing/approving a pending
+mapping proposal) has no UI anywhere else either now that the page is gone, so it's API-only too.
 
 ## Decision cycle (FRD §3.1)
 
@@ -147,7 +161,7 @@ in-scope file types. Closed as its own ingestion path rather than bolted onto th
 because a maintenance notice or storm alert doesn't decompose into asset_id/metric/value rows —
 it has to be *read*:
 
-- `POST /ingestion/documents` (Document Intake workspace) accepts a PDF or image. `backend/app/
+- `POST /ingestion/documents` (Document Intake, API-only — see above) accepts a PDF or image. `backend/app/
   ingestion/document_ingest.py` renders each page to a PNG (`pypdfium2` for PDF pages, `Pillow` for
   photos) and shows it to the same `ModelGateway.complete_structured(...)` every specialist agent
   already uses — extended with an `images` parameter (`model_gateway.py`) so Anthropic's/OpenAI's

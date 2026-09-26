@@ -9,7 +9,6 @@ import ConfigurationStudio from "./pages/ConfigurationStudio";
 import ConnectorStudio from "./pages/ConnectorStudio";
 import CustomerDecisions from "./pages/CustomerDecisions";
 import DecisionCentre from "./pages/DecisionCentre";
-import DocumentIntake from "./pages/DocumentIntake";
 import LiveSignalMonitor from "./pages/LiveSignalMonitor";
 import Login from "./pages/Login";
 import PlatformOperations from "./pages/PlatformOperations";
@@ -47,7 +46,6 @@ function AppRoutes() {
         <Route path="/actions" element={<ActionLog />} />
         <Route path="/connectors" element={<ConnectorStudio />} />
         <Route path="/configuration" element={<ConfigurationStudio />} />
-        <Route path="/documents" element={<DocumentIntake />} />
         <Route path="/policy" element={<PolicyStudio />} />
         <Route path="/simulation" element={<SimulationLab />} />
         <Route path="/observability" element={<AgentObservability />} />

@@ -70,6 +70,28 @@ def _resolve_local_data_path(path_str: str) -> Path:
     return candidate
 
 
+def _missing_local_file_message(path_str: str) -> str:
+    """A `data_table` connector's local-path field expects a bare filename
+    from the platform's watched data folder (DATA_WATCH_DIR, mounted from
+    the host's own `data/` directory) — not that host directory's own
+    absolute path, which only means something on the machine typing it, not
+    inside this container. Pasting the host path (e.g.
+    "/Users/you/project/data") doesn't error out at creation time (it's
+    still a syntactically valid path *inside* the watched folder, just one
+    that quite reliably doesn't exist there) — it fails here instead, so the
+    message actively diagnoses that specific, easy-to-make mistake rather
+    than just reporting "not found"."""
+    base_message = f"{path_str!r} was not found under the watched data folder"
+    if "/" in path_str.strip("/"):
+        return (
+            f"{base_message}. This field expects a bare filename that already exists directly "
+            f"inside the watched data folder (e.g. \"03_renewable_generation.csv\"), not a full "
+            f"path — the host's own folder path means nothing inside the container. Copy the file "
+            f"into this platform's data/ directory first, then enter just its filename here."
+        )
+    return base_message
+
+
 def _validate_database_connector_url(url: str) -> str | None:
     """Returns an error message, or None if the connection string is an
     allowed postgresql:// target."""
@@ -215,7 +237,7 @@ def test_connector(
             result = ConnectorTestResult(ssrf_allowed=True, ssrf_reason=None)
             result.http_reachable = exists  # repurposed here as "file exists under the watched folder"
             if not exists:
-                result.error = f"{connector.endpoint_url!r} was not found under the watched data folder"
+                result.error = _missing_local_file_message(connector.endpoint_url)
     else:
         ssrf_result = check_outbound_url(connector.endpoint_url)
         result = ConnectorTestResult(ssrf_allowed=ssrf_result.allowed, ssrf_reason=ssrf_result.reason)
@@ -498,7 +520,7 @@ def ingest_connector(
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
         if not candidate.is_file():
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{connector.endpoint_url!r} was not found under the watched data folder")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, _missing_local_file_message(connector.endpoint_url))
         filename = candidate.name
         if candidate.suffix.lower() not in (".csv", ".json", ".xlsx", ".xlsm"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"path must end in .csv/.json/.xlsx (got {filename!r})")

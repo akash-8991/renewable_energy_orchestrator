@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import Badge from "../components/Badge";
 import DecisionSummary from "../components/DecisionSummary";
@@ -33,7 +32,6 @@ function fmt(v: number | undefined, digits = 0) {
 }
 
 export default function PortfolioOperations() {
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
@@ -99,12 +97,11 @@ export default function PortfolioOperations() {
                   : opsError || !ops
                     ? "Could not check optimizer status — try reloading the page."
                     : !ops.has_data_source
-                      ? "Activate a database or data_table connector in Connector Studio to enable Start Optimizer (Document Intake uploads still ingest data, but no longer unlock this on their own)."
+                      ? "Activate a database or data_table connector in Connector Studio to enable Start Optimizer."
                       : "A database/data_table connector is active — click Start Optimizer to begin analysis, decisions and actions."}
             </p>
           </div>
           <div className="row" style={{ gap: 8 }}>
-            <button className="secondary" onClick={() => navigate("/documents")}>Document Intake</button>
             {running ? (
               <button className="secondary" onClick={() => stop.mutate()} disabled={stop.isPending}>
                 {stop.isPending ? "Stopping..." : "Stop Optimizer"}

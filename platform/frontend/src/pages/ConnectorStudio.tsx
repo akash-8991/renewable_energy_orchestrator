@@ -15,7 +15,7 @@ const KIND_OPTIONS = [
   { value: "scada", label: "SCADA API", help: "An external SCADA/OPC-UA gateway. Registers and reachability-tests the endpoint — live OT dispatch always goes through the separate, safety-critical ot-gateway-sim path, never a registered connector, regardless of activation status." },
   { value: "iot", label: "IoT API", help: "A device/sensor platform (smart meters, edge gateways). Once active, \"Ingest now\" fetches its JSON in the generic asset_id/metric/event_time/value/unit shape and publishes it as real telemetry — the same path a file upload uses. Does not unlock Start Optimizer on its own." },
   { value: "database", label: "Database", help: "A Postgres connection string (postgresql://user:pass@host:port/db) — e.g. the bundled reference source-db: postgresql://reo_source:reo-source-secret@source-db:5432/client_export. Once active, set a table name and \"Ingest now\" connects and pulls that table in, through the same reference-dataset mapping data_table ingestion uses below." },
-  { value: "data_table", label: "Data table (path/link)", help: "A CSV/JSON/XLSX URL, or a filename from the platform's watched data folder (e.g. 03_renewable_generation.csv). A recognized reference-dataset filename is mapped onto real telemetry/customers automatically; anything else is expected in the generic asset_id/metric/event_time/value/unit shape." },
+  { value: "data_table", label: "Data table (path/link)", help: "A CSV/JSON/XLSX URL, or a bare filename already sitting in the platform's watched data folder (e.g. 03_renewable_generation.csv) — not your computer's own path to that folder, which means nothing inside the platform's containers. A recognized reference-dataset filename is mapped onto real telemetry/customers automatically; anything else is expected in the generic asset_id/metric/event_time/value/unit shape." },
 ];
 
 // Matches backend/app/routers/operations.py's has_data_source check exactly:
@@ -134,7 +134,7 @@ export default function ConnectorStudio() {
           </div>
           <div className="field">
             <label>
-              {isDataTable ? "Data path / link (.csv/.json/.xlsx URL, or a watched-folder filename)"
+              {isDataTable ? "Data path / link (.csv/.json/.xlsx URL, or a bare watched-folder filename — not a full path)"
                 : isDatabase ? "Connection string (postgresql://...)" : "Endpoint URL"}
             </label>
             <input
@@ -142,11 +142,18 @@ export default function ConnectorStudio() {
               onChange={(e) => setUrl(e.target.value)}
               required
               placeholder={
-                isDataTable ? "https://example.com/exports/telemetry.csv  or  03_renewable_generation.csv"
+                isDataTable ? "https://example.com/exports/telemetry.csv  or just  03_renewable_generation.csv"
                   : isDatabase ? "postgresql://reo_source:reo-source-secret@source-db:5432/client_export" : undefined
               }
               style={{ width: "100%" }}
             />
+            {isDataTable && (
+              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                For a local file, place it in this platform's own <code className="mono">data/</code> folder first,
+                then enter just its filename here (e.g. <code className="mono">03_renewable_generation.csv</code>) —
+                not your computer's path to that folder, which the platform's containers can't resolve.
+              </p>
+            )}
           </div>
           {isDatabase && (
             <div className="field">
