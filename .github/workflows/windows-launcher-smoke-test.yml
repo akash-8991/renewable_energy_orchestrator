@@ -1,0 +1,24 @@
+name: Windows launcher smoke test
+
+# Manual-only: exercises reo_launcher.py's core functions (download/extract
+# the real platform source from GitHub, write infrastructure/.env, detect
+# Docker, run a subprocess via CREATE_NO_WINDOW) on a real windows-latest
+# runner — the one thing that can only be verified on actual Windows, not
+# simulated on macOS/Linux. Does NOT bring up the real docker-compose stack:
+# see windows-docker-probe.yml — this platform's images are all Linux-based
+# and the hosted windows-latest runner only supports Windows containers.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  smoke-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the Windows-native smoke test
+        run: python platform/launcher/_windows_smoke_test.py
