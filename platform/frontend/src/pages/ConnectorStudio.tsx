@@ -18,11 +18,13 @@ const KIND_OPTIONS = [
   { value: "data_table", label: "Data table (path/link)", help: "A CSV/JSON/XLSX URL, or a filename from the platform's watched data folder (e.g. 03_renewable_generation.csv). A recognized reference-dataset filename is mapped onto real telemetry/customers automatically; anything else is expected in the generic asset_id/metric/event_time/value/unit shape." },
 ];
 
-// Matches backend/app/routers/operations.py's has_data_source check exactly
-// (any active connector, regardless of kind) — this used to be narrower
-// (excluding "generic") and disagreed with what Start Optimizer actually
-// required, so the hint below could claim no data source was connected
-// while Start was already enabled.
+// Matches backend/app/routers/operations.py's has_data_source check exactly:
+// only an active database or data_table connector counts — the other four
+// kinds are for agents to act *out* on the world once a decision is made,
+// not for bringing data in, so they deliberately don't gate Start Optimizer
+// (by explicit request), and neither does a Document Intake upload on its
+// own — see operations.py's module docstring.
+const DATA_INGESTION_KINDS = ["database", "data_table"];
 
 export default function ConnectorStudio() {
   const qc = useQueryClient();
@@ -205,10 +207,10 @@ export default function ConnectorStudio() {
         </table>
         </div>
       )}
-      {data && data.length > 0 && data.every((c) => c.status !== "active") && (
+      {data && !data.some((c) => c.status === "active" && DATA_INGESTION_KINDS.includes(c.kind)) && (
         <p className="muted" style={{ fontSize: 11, marginTop: 10 }}>
-          No active data-source connector yet — Portfolio Operations' Start Optimizer needs at least one active
-          connector here (or a document/dataset ingested in Document Intake) before it can begin.
+          No active database or data_table connector yet — Portfolio Operations' Start Optimizer needs one of those
+          two kinds active before it can begin (a Document Intake upload alone no longer unlocks it).
         </p>
       )}
     </div>

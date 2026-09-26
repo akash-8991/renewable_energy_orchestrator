@@ -268,11 +268,12 @@ export default function DocumentIntake() {
     <div>
       <h2 style={{ fontSize: 15 }}>Document Intake</h2>
       <p className="muted">
-        Upload one or more files from any data source — scanned/photographed PDFs or images (maintenance
-        notices, storm/weather advisories, grid outage notices, inspection reports), read with vision by the
-        same model gateway every specialist agent uses; or structured CSV/JSON/XLSX telemetry tables, parsed
-        directly. Extractions land here as evidence for review before they can affect anything real. Once
-        anything here ingests successfully, the optimizer starts automatically if it wasn't already running.
+        Upload one or more files from any data source — scanned/photographed PDFs, images or .docx (maintenance
+        notices, storm/weather advisories, grid outage notices, inspection reports), read by the same model
+        gateway every specialist agent uses; or structured CSV/JSON/XLSX tables, parsed directly or mapped by an
+        agent if their structure isn't already recognized. Extractions land here as evidence for review before
+        they can affect anything real. This still ingests real data, but no longer starts the optimizer on its
+        own — that requires an active database or data_table connector in Connector Studio.
       </p>
       {results.length > 0 && (
         <div className={results.some((r) => r.status === "error") ? "error-banner" : "evidence-box"} style={{ marginBottom: 14 }}>

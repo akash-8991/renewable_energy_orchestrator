@@ -95,9 +95,14 @@ def run(base_url: str) -> int:
         # connector (maker), a *different* user activates it (checker —
         # platform.admin also carries the tenant_admin role, same as any
         # real second admin account would), then Start Optimizer unlocks.
+        # Must be kind=data_table or database — those are the only two kinds
+        # that gate has_data_source (routers/operations.py); the other four
+        # (generic/market_energy_purchase/scada/iot) are for agents to act
+        # *out* on the world, not for bringing data in, so an active one no
+        # longer unlocks Start Optimizer, by explicit request.
         connector = d.client.post(
             "/connectors",
-            json={"name": "Demo data source", "kind": "generic", "endpoint_url": "https://example.com", "method": "GET"},
+            json={"name": "Demo data source", "kind": "data_table", "endpoint_url": "https://example.com", "method": "GET"},
             headers=headers,
         ).json()
         d.client.post(f"/connectors/{connector['id']}/test", headers=headers)

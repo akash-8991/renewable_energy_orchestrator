@@ -155,14 +155,20 @@ You'll see a line ending `demo login: any email above / password 'Password123!' 
    - Email: any seeded email from the table below
    - Password: `Password123!`
 3. You should land on **Portfolio Operations** showing an **idle** state — a fresh tenant doesn't
-   start making decisions on its own. Connect a data source first, then start it:
-   - Either click **Document Intake** (top of Portfolio Operations) and upload a file — any
-     `.csv`/`.json`/`.xlsx` (structured telemetry) or `.pdf`/`.png`/`.jpg` (a document, read via
-     vision). A successful upload **auto-starts** the optimizer, no extra click needed; or
-   - Go to **Connector Studio**, register a connector (any `kind`), have a *different* user
-     activate it (maker-checker — e.g. `tenant.admin` creates, `platform.admin` activates), then
-     back on Portfolio Operations click **Start Optimizer** (enabled once at least one connector
-     is active or a document has been ingested).
+   start making decisions on its own. Starting requires an active `database` or `data_table`
+   connector in Connector Studio:
+   - Go to **Connector Studio**, register a `database` connector (e.g. the bundled `source-db`
+     reference database) or a `data_table` connector (a CSV/JSON/XLSX path or link), have a
+     *different* user activate it (maker-checker — e.g. `tenant.admin` creates, `platform.admin`
+     activates), then back on Portfolio Operations click **Start Optimizer** (enabled once
+     `has_data_source=true`).
+   - **Document Intake** (top of Portfolio Operations) is a separate, independent ingestion path —
+     uploading a `.csv`/`.json`/`.xlsx` (structured telemetry) or `.pdf`/`.png`/`.jpg`/`.docx` (a
+     document, read via vision or extracted text) really does ingest the data, but by design it no
+     longer auto-starts the optimizer; only the Connector Studio route above does that. The other
+     four registrable connector kinds (`generic`, `market_energy_purchase`, `scada`, `iot`) also
+     don't count toward this gate — they're for agents to act *out* on the world once a decision is
+     made, not for bringing data in (see `ARCHITECTURE.md`).
 4. Once started, Portfolio Operations fills in with live generation/demand numbers that update
    every few seconds (the built-in `edge-simulator` publishes synthetic telemetry continuously
    regardless of this gate — starting/stopping controls the decision cycle and dashboard display,

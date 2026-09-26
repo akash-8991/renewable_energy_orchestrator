@@ -158,15 +158,22 @@ explicitly starts analysis, and starting should require an actual connected data
 Implemented as `Tenant.operating_state` (`idle`|`running`, default `idle`) — `policy/cycle.py`
 skips the decision cycle entirely for an idle tenant (the same early-return already used for "no
 portfolio seeded yet"), and `GET/POST /operations/{status,start,stop}` exposes it. `start` 400s
-unless at least one connector is `active` or at least one document has been ingested
-(`has_data_source` in the status response). A successful ingestion in either Document Intake path
-(`/ingestion/files` or `/ingestion/documents`) also auto-starts the tenant if it was idle — see
-`mark_started_if_idle()` in `backend/app/routers/operations.py` — so uploading a dataset doesn't
-require a separate manual Start click, matching the literal request that ingesting a document
-should "initiate analysis and operation." The edge-simulator keeps publishing synthetic telemetry
-regardless of this gate (a utility's sensor layer runs independently of whether anyone's currently
-making decisions on top of it) — the gate controls the *decision cycle and dashboard display*,
-not the underlying telemetry stream.
+unless at least one connector of kind `database` or `data_table` is `active`
+(`DATA_INGESTION_CONNECTOR_KINDS` in `backend/app/routers/operations.py`; `has_data_source` in the
+status response). By explicit request, only these two connector kinds gate/auto-start the
+optimizer — the other four registrable kinds (`generic`, `market_energy_purchase`, `scada`, `iot`)
+are for agents to act *out* on the world once a decision is made (not yet wired to real action
+execution — see `ARCHITECTURE.md`), not for bringing data in, so an active one of those does not
+count. Document Intake uploads (`/ingestion/files`, `/ingestion/documents`) also deliberately do
+*not* auto-start the tenant — they remain a real, independent ingestion path (see the "Connector
+Studio is a registration surface for four of six kinds" item above for the `data_table`/`database`
+ingestion mechanics they share), but starting analysis is reserved for an explicit Connector
+Studio connection. `document_count`/`active_connector_count` are still reported in the status
+response for visibility, but only the latter (restricted to the two data-ingestion kinds) drives
+`has_data_source`. The edge-simulator keeps publishing synthetic telemetry regardless of this gate
+(a utility's sensor layer runs independently of whether anyone's currently making decisions on top
+of it) — the gate controls the *decision cycle and dashboard display*, not the underlying
+telemetry stream.
 
 ## Known tracked item: agent observability/eval is real but demo-scale
 

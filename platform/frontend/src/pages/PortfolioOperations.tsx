@@ -99,8 +99,8 @@ export default function PortfolioOperations() {
                   : opsError || !ops
                     ? "Could not check optimizer status — try reloading the page."
                     : !ops.has_data_source
-                      ? "Connect a data source (Connector Studio) or ingest a document/dataset (Document Intake) to enable Start Optimizer."
-                      : "A data source is connected — click Start Optimizer to begin analysis, decisions and actions."}
+                      ? "Activate a database or data_table connector in Connector Studio to enable Start Optimizer (Document Intake uploads still ingest data, but no longer unlock this on their own)."
+                      : "A database/data_table connector is active — click Start Optimizer to begin analysis, decisions and actions."}
             </p>
           </div>
           <div className="row" style={{ gap: 8 }}>
