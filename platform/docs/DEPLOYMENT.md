@@ -12,7 +12,9 @@ otherwise.
 **This guide gets the platform running.** Once it's up, switch to **`docs/USAGE_GUIDE.md`** for the
 operator runbook — logging in, creating users/tenants, connecting a real backend database, weather
 feed, market-data site, IoT source, LLM provider and SSO setup, RBAC roles, and (read this one) what
-the battery-charging/renewable-optimization SCADA control question does and doesn't cover today.
+the battery-charging/renewable-optimization SCADA control question does and doesn't cover today. Its
+last section walks through every one of those from the dashboard alone, with no API calls at all,
+for anyone who'd rather not use curl/Postman/scripts.
 
 ---
 
@@ -221,7 +223,8 @@ account rather than provisioning a new viewer.
 
 **The platform is up.** For everything past this point — connecting a real backend database,
 weather feed, market-data site, IoT source, or SCADA system, creating additional users/tenants, and
-configuring the LLM provider — see **`docs/USAGE_GUIDE.md`**.
+configuring the LLM provider — see **`docs/USAGE_GUIDE.md`**, including its dashboard-only walkthrough
+(no curl needed) of everything in it.
 
 #### Demo accounts (one per role)
 

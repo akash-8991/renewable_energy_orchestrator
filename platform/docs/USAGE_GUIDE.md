@@ -29,6 +29,7 @@ notably SCADA/OT control), that's called out explicitly rather than glossed over
 16. [Exporting audit evidence](#16-exporting-audit-evidence)
 17. [Local demo vs. AWS production — what actually differs](#17-local-demo-vs-aws-production--what-actually-differs)
 18. [Troubleshooting](#18-troubleshooting)
+19. [Configuring the platform entirely from the UI (no curl)](#19-configuring-the-platform-entirely-from-the-ui-no-curl)
 
 ---
 
@@ -510,3 +511,85 @@ against a different `http://localhost:8000` vs. your real API domain.
   scheme/port) as an allowed redirect URI on the IdP side.
 - **General API exploration** — `/docs` (Swagger UI) on any deployment lets you try every endpoint
   interactively with your bearer token.
+
+## 19. Configuring the platform entirely from the UI (no curl)
+
+Everything in §2–§16 above has a curl example alongside it because that's the fastest way to show
+the exact contract each one expects — but almost none of it actually requires a terminal. This
+section is the same ground, click-by-click, dashboard page by dashboard page. The one genuine
+exception is called out explicitly below rather than silently skipped.
+
+### Log in
+
+Open the dashboard, enter your tenant slug/email/password (or click **Log in with SSO** — see §13),
+and you land on **Portfolio Operations**.
+
+### Create additional users
+
+**Tenant Administration** (sidebar) → fill in email, display name, password, and pick a role from
+the dropdown → **Create user**. The new user appears immediately in the "Users in this tenant" table
+below the form. This requires `manage:users` (Tenant Admin or Platform Admin) — if you don't see the
+form, your account doesn't have that permission.
+
+**The one exception: creating a brand-new tenant has no UI form.** Provisioning a tenant is a
+platform-admin-only, break-glass-audited action (`docs/ARCHITECTURE.md`'s tenant-isolation section)
+that this build only exposes as `POST /admin/tenants`. If you want to do this without typing a
+terminal command, open `/docs` (Swagger UI) on your deployment, find `POST /admin/tenants`, click
+**Try it out**, fill in the JSON body fields, and click **Execute** — no curl, still no code, just a
+form in the browser. Everything else in this section has a real sidebar page.
+
+### Connect a backend database or file feed
+
+**Connector Studio** (sidebar) → **+ New connector** → pick a **Kind** from the dropdown (its help
+text updates to describe exactly what that kind does and expects) → fill in the name and
+endpoint/connection string → for a `database` connector, also fill in the table name field that
+appears → **Create (draft)**.
+
+The new connector appears in the table below with status `draft`. Click **Test** to run a
+reachability check (its result — reachable, blocked, or an error — shows in the "Last test" column).
+Sign out and log back in as a *different* user with `manage:connectors`/`activate:connector` (or
+just use a second account) and click **Activate** — the platform enforces that the creator and
+activator can't be the same person, so this step genuinely needs a second login. Once active, an
+**Ingest now** button appears for `database`/`data_table`/`market_energy_purchase`/`iot` kinds
+(§5–§9) — click it, and the resulting message tells you how many rows were processed. Click
+**Disable** at any time to stop using a connector.
+
+### Connect a live weather feed, tune the model gateway, or enable SSO
+
+**Configuration Studio** (sidebar) — three cards, all on one page:
+
+- **Live weather feed**: check **Enable live weather feed**, type your site's latitude and
+  longitude into the two number fields, then click **Save configuration** at the bottom.
+- **Model gateway resilience**: check/uncheck **Enable circuit breaker**, and adjust the call
+  timeout, failure threshold and cooldown number fields.
+- **Identity provider (SSO)**: check **Enable SSO login for this tenant** (only takes effect if this
+  deployment has an OIDC provider configured at all — the card tells you either way).
+
+One **Save configuration** button applies whichever of the three sections you changed. The page
+shows who last saved it and when, right below the button.
+
+### Set the autonomy mode, or hit the emergency stop
+
+**Policy Studio** (sidebar) → "Current portfolio-wide policy" shows the active mode and safety-case
+reference (if any). Under "Set new policy," pick a new mode from the dropdown — choosing
+**AUTONOMOUS_BOUNDED** reveals a required safety-case-reference field, matching the API's own
+validation in §15 — then click **Apply**. Further down, the "Emergency stop" card's single button
+toggles e-stop on/off immediately, regardless of the current autonomy mode. The same page's
+"Optimality criteria (objective policy)" card lets you adjust the cost/imbalance/degradation/
+carbon/curtailment/reliability weights and click **Apply (creates a new version)**.
+
+### Export audit evidence
+
+**Audit & Exports** (sidebar) → **Audit Chain** tab shows the hash-chain integrity badge and every
+audit event; the **Governed Export** tab has a single **Generate export** button (produces an Excel
+workbook — Decisions/Signals/Reasoning/Approvals/Acknowledgements/Export Metadata — for the last 500
+decisions, requires the Auditor/DPO role). It shows a live status badge while running, then a
+**Download .xlsx** button and its SHA-256 checksum once complete.
+
+### Everything else
+
+Approval Inbox, Live Signal Monitor, Action Tickets, Document Intake, Simulation Lab, Agent
+Observability, and Platform Operations are all pure dashboard pages too — there's no curl-only
+capability hiding behind any of them. If a page ever shows nothing where you expect a control,
+that's almost always an RBAC permission gap (§14), not a missing feature — the roles/permissions
+table in §14 says exactly which role unlocks it, or ask a Platform Admin to check your account.

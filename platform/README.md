@@ -13,7 +13,9 @@ click-by-click steps to run this locally or actually stand it up on AWS (or anot
 **`docs/DEPLOYMENT.md`** — the quickstart below is the condensed version. Once it's running, see
 **`docs/USAGE_GUIDE.md`** for the operator runbook: logging in, creating users, connecting a
 backend database/weather feed/market-data site/IoT source, LLM provider and SSO setup, RBAC roles,
-and exactly what the battery-charging/SCADA control question does and doesn't cover today.
+and exactly what the battery-charging/SCADA control question does and doesn't cover today — its
+final section covers every one of those the same way, purely by clicking through the dashboard,
+for anyone who'd rather not touch a terminal at all.
 
 ## Repository layout
 
