@@ -113,6 +113,11 @@ Demo login: tenant slug `demo-utility`, any seeded email (e.g. `tenant.admin@dem
 password `Password123!` (local/demo only — see `database/seed.py`). For the full table of all 9
 demo accounts and what each role can do, see **`docs/DEPLOYMENT.md`** (§ A7, "Demo accounts").
 
+A fresh tenant lands on Portfolio Operations **idle** — Start Optimizer only unlocks once an
+active `database` or `data_table` connector exists in Connector Studio (Document Intake uploads
+still ingest real data but no longer unlock it on their own). See `docs/DEPLOYMENT.md` A7 step 3
+and `docs/SIMPLIFICATIONS.md`'s "Portfolio-wide start/stop gate" section.
+
 The dashboard has 14 workspaces (sidebar): Portfolio Operations, Decision Centre, Customers,
 Approval Inbox, Live Signal Monitor, Action Tickets, Connector Studio, Document Intake,
 Policy Studio, Simulation Lab, Agent Observability, Audit & Exports, Tenant Administration,
