@@ -121,7 +121,7 @@ services:
     environment: *python-env
     depends_on: { postgres: { condition: service_healthy } }
     working_dir: /app/platform/database
-    entrypoint: ["alembic", "upgrade", "head"]
+    entrypoint: ["python", "/app/platform/database/migrate.py"]  # waits for the database, then `alembic upgrade head`
 
   api:
     build: { context: ../.., dockerfile: platform/backend/Dockerfile }
