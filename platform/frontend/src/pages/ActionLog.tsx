@@ -61,6 +61,7 @@ export default function ActionLog() {
             <option value="sell">sell</option>
             <option value="curtail">curtail</option>
             <option value="demand_response">demand_response</option>
+            <option value="maintenance_advice">maintenance_advice (advisory)</option>
           </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">all statuses</option>
@@ -72,6 +73,7 @@ export default function ActionLog() {
             <option value="failed">failed</option>
             <option value="held">held</option>
             <option value="expired">expired</option>
+            <option value="advisory">advisory</option>
           </select>
           <button className="secondary" onClick={() => data && downloadCsv(data)} disabled={!data || data.length === 0}>
             Export CSV

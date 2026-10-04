@@ -157,6 +157,21 @@ cd platform
 python3 tests/demo_runner.py --base-url http://localhost:8000
 ```
 
+### Forecasts, scenarios, maintenance
+
+Forecasts are a physics-based baseline plus a trained ML model per asset; **operators accept the
+proposed forecast criteria or set their own** (Policy Studio) — until then the physics baseline is
+used. Shocks are deterministic named scenarios (not Monte Carlo). Maintenance is advisory only — it is
+recommended, never scheduled or dispatched. Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+### Continuous ingestion
+
+Active data sources are re-read every minute (`CONNECTOR_POLL_SECONDS`, default 60; 0 disables).
+Sources with no new data are monitored but not re-ingested; new data requests an immediate decision cycle
+(`trigger = event:data_change`) rather than waiting for the optimizer's scheduled tick
+(`DECISION_CYCLE_SECONDS`, default 120). See *Continuous data flow* in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ### Ports
 
 Postgres and Redis are mapped to non-default host ports (`5433`, `6380`) because a native/

@@ -35,6 +35,83 @@ Agents can only ever *reach* the optimizer/policy/OT layers through typed, schem
 there is no code path from `agent-worker` to `ot-gateway-sim` that does not pass through the policy
 engine and (for anything but the lowest-risk bounded actions) a human approval.
 
+### Continuous data flow and event-driven replanning
+
+Two things start a decision cycle in `optimizer-worker`:
+
+1. **The clock** — every `DECISION_CYCLE_SECONDS` (default 120; spec target 10 minutes).
+2. **A data-change event** — the api publishes `reo.decision.cycle.requested` on the
+   `reo.decision.cycle` stream (`reo_common.events.request_decision_cycle`) and the worker runs a
+   cycle immediately, recording `trigger = "event:data_change"` on the Decision. After an
+   event-driven cycle the scheduled cadence restarts from that moment.
+
+What raises the event: `ingestion/connector_poller.py` re-reads every **active** `database`,
+`data_table`, `iot` and `market_energy_purchase` connector every `CONNECTOR_POLL_SECONDS`
+(default 60; 0 disables) through the same code path as a manual "Ingest now"
+(`run_connector_ingest`). Each source is checked for *new* data — a SHA-256 content fingerprint plus,
+for readings-shaped sources, a per-(asset, metric) `event_time` high-water mark (both kept in Redis);
+a source with nothing new keeps being monitored but is not re-ingested, and only a source that brought
+in new rows raises the event — after
+waiting for the telemetry consumer to persist those rows, so the cycle plans on them. The
+watched-folder scanner (`folder_watcher.py`, every 10 s) still ingests newly dropped files but does
+not raise the event itself — a `data_table` connector pointing at the same file would otherwise
+cause two cycles for one change. The event is only sent for a tenant that is `running`; an idle
+tenant just ingests.
+
+```
+active connector / dropped file ──(every 60 s, only if content changed)──▶ reo.telemetry ──▶ Timescale
+                                                       │
+                                  (rows persisted) ────▼
+                                  reo.decision.cycle ──▶ optimizer-worker: snapshot → forecast → solve → Decision
+```
+
+### Forecasting: physics baseline + trained ML, operator-governed
+
+Each asset's forecast is a physics-based baseline (diurnal solar curve, wind power curve, daily
+demand/price shapes; `baseline-v1`) — and, additionally, a **trained ML model**
+(`reo_common/forecast_ml.py`, `ml-ridge-v1`): a ridge regression on hour-of-day / day-of-year /
+weekend features that takes the physics baseline as one of its inputs, trained on the telemetry the
+platform has actually ingested (hourly means per asset; at least `min_training_hours` of history, one
+week by default). Its uncertainty band is the model's own held-out residuals per hour of day. The
+last 20% of history is held out so every model comes with an honest error figure *against the physics
+baseline*. Training is closed-form least squares — deterministic, no random sampling.
+
+**Operators decide what is used** (Policy Studio → *Forecast criteria*, `GET/PUT /forecasting/criteria`,
+`POST /forecasting/criteria/accept`, `POST /forecasting/retrain`; permission `manage:forecast_criteria`,
+held by operator, senior_operator, portfolio_manager, model_admin and tenant_admin; every decision is
+audit-logged):
+
+| Status | Meaning | What forecasts use |
+|---|---|---|
+| `proposed` (default) | nothing decided yet | physics baseline only — a newly trained model never takes over on its own |
+| `accepted` | operator adopted the platform's proposal | `auto`: ML per asset only where it beats physics by ≥ `min_improvement_pct` (5%) |
+| `custom` | operator set their own | their `model_mode` (`physics` / `ml` / `auto`), `band_scale` (uncertainty-band multiplier), `min_training_hours`, `min_improvement_pct`, `retrain_hours` |
+
+The optimizer trains/refreshes models every `retrain_hours` (and 15 minutes after an
+`insufficient_data` result) regardless of mode, so the evaluation is always there to inform the
+decision. Each `Forecast` row is stamped with the `model_version` that produced it; an explicit `ml`
+mode that has no usable model for an asset falls back to the baseline and marks the row `is_fallback`.
+
+### Shocks are deterministic named scenarios
+
+The six shocks (`CLOUD_COVER`, `WIND_SURGE`, `PRICE_SPIKE`, `BATTERY_OUTAGE`, `LINE_CONGESTION`,
+`DEMAND_SHOCK`; `policy/scenarios.py`) are fixed, named perturbations, not Monte Carlo trajectories:
+the same inputs under the same scenario always give the same plan, so an operator, approver or
+auditor can reproduce and compare any "what if". Uncertainty is handled without sampling too — the
+forecast's q10/q50/q90 band becomes one risk-adjusted deterministic series. `tests/test_scenarios_
+deterministic.py` enforces it (exactly the six names, constant multipliers, no random imports in the
+scenario modules, identical reruns).
+
+### Maintenance is advisory only
+
+The platform *recommends* maintenance; it never schedules, dispatches or enforces it. Advisories are
+`Action` rows of type `maintenance_advice` (battery state of health < 80%, battery warranty cycles
+< 500, or an asset whose source flags its telemetry bad — `policy/maintenance_advisory.py`), shown in
+the Action Tickets page with status `advisory`. Enforced at every layer: no Signal is ever built for
+one, no Approval is created (`requires_approval = false`), they don't change the optimizer's plan, and
+the OT gateway refuses the command type outright. (Promoting an uploaded maintenance notice to a
+capacity derate is a separate, explicit human decision, not something an advisory does.)
+
 ## Service → spec-document map
 
 | Service | Primary spec sections | Canonical entities it owns |
@@ -92,7 +169,7 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Action Tickets | `GET /actions` |
 | Connector Studio | `GET/POST /connectors` (incl. `kind`: generic/market_energy_purchase/scada/iot/database/data_table), `POST /connectors/{id}/{test,activate,disable,ingest}` (`ingest`: `data_table`/`database` route recognized reference-dataset files/tables through `hackathon_dataset.py`'s canonical mapping else the generic telemetry shape; `market_energy_purchase` writes a real price `Forecast` series; `iot` publishes real telemetry through the same generic shape; `generic`/`scada` remain registration/reachability-test only, the latter permanently by design — see `SIMPLIFICATIONS.md`) |
 | Configuration Studio | `GET/PUT /configuration/settings` (`manage:settings`/`manage:platform_config`) — live weather feed, model gateway circuit breaker thresholds, SSO enablement, all per-tenant and live-editable with no redeploy |
-| Policy Studio | `GET/PUT /governance/autonomy-policy`, `GET/PUT /governance/objective-policy`, `POST /governance/e-stop` |
+| Policy Studio | `GET/PUT /governance/autonomy-policy`, `GET/PUT /governance/objective-policy`, `POST /governance/e-stop`, `GET/PUT /forecasting/criteria`, `POST /forecasting/criteria/accept`, `POST /forecasting/retrain` (forecast criteria: accept the proposal or set your own) |
 | Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
 | Agent Observability | `GET /observability/summary`, `GET /observability/agent-calls`, `GET/POST /observability/eval-runs[/run]` |
 | Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` (Excel export includes an "Actions" sheet) |
@@ -119,7 +196,9 @@ mapping proposal) has no UI anywhere else either now that the page is gone, so i
 
 1. Scheduler/event detector opens a decision cycle with a correlation ID.
 2. Data-quality agent assesses the trusted snapshot; twin state is locked.
-3. Forecast + scenario services produce trajectories for the horizon.
+3. Forecast + scenario services produce trajectories for the horizon. Forecasts come from the
+   physics-based baseline and/or a trained ML model per asset, as the operator's forecast criteria
+   dictate (see *Forecasting* below); scenarios are the six deterministic named shocks.
 4. Optimizer computes a feasible plan; the independent validator re-checks it.
 5. A risk-averse alternative is solved against the conservative tail of the forecast band, and a
    forward-looking comparison across all six named scenarios is solved and persisted as

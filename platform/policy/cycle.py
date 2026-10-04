@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from actions_builder import AssetRef, build_actions_for_step
 from document_constraints import apply_capacity_derates
 from forecast import generate_and_persist_forecasts
+from reo_common.forecast_ml import effective_criteria, ensure_models_fresh, load_trained_models, models_to_apply
 from live_weather import fetch_live_weather
 from reo_common.platform_settings import get_or_create_platform_settings
 from policy.engine.autonomy import autonomous_execution_allowed, resolve_autonomy_mode
@@ -45,6 +46,7 @@ from reo_common.twin import latest_readings_for_tenant
 from scenarios import build_series, risk_adjusted_series
 from solver import BatteryInput, ConsumerInput, GenAssetInput, GridInput, ObjectiveWeights, solve
 from guardrails.validator import validate_plan
+from maintenance_advisory import ACTION_TYPE as MAINTENANCE_ADVICE, AssetDataHealth, BatteryHealth, maintenance_advisories
 from sqlalchemy import select
 
 log = logging.getLogger("optimizer-worker.cycle")
@@ -115,7 +117,18 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             weather = None
             if platform_settings.live_weather_enabled and platform_settings.weather_site_lat is not None and platform_settings.weather_site_lon is not None:
                 weather = fetch_live_weather(platform_settings.weather_site_lat, platform_settings.weather_site_lon)
-            generate_and_persist_forecasts(db, tenant_id, assets, HORIZON_HOURS, STEP_HOURS, now, weather)
+            # operator-governed forecast criteria: physics baseline until an
+            # operator accepts the proposed criteria or sets their own. Models
+            # are (re)trained either way so the operator can see how ML compares.
+            criteria = effective_criteria(platform_settings.forecast_criteria)
+            ml_models: dict = {}
+            try:
+                with db.begin_nested():  # a failed training run must not poison the rest of the cycle
+                    ensure_models_fresh(db, tenant_id, assets, criteria, now)
+                ml_models = models_to_apply(load_trained_models(db, tenant_id), criteria)
+            except Exception:
+                log.exception("forecast model training/loading failed — using the physics baseline this cycle")
+            generate_and_persist_forecasts(db, tenant_id, assets, HORIZON_HOURS, STEP_HOURS, now, weather, ml_models, criteria)
             db.commit()
             n_steps = int(HORIZON_HOURS / STEP_HOURS)
 
@@ -292,6 +305,22 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
                     grid_asset=AssetRef(id=grid_asset.id, rated_capacity_kw=grid_asset.rated_capacity_kw),
                     grid_max_import_kw=limits["max_import_kw"], grid_max_export_kw=limits["max_export_kw"],
                 ))
+            # Maintenance is advisory only: recommendations are recorded for
+            # operators to see; no Signal/Approval is ever built for them (the
+            # routing below skips non-dispatchable types) and nothing is scheduled.
+            recent = db.execute(
+                select(Action.asset_id, Action.envelope).where(
+                    Action.tenant_id == tenant_id, Action.action_type == MAINTENANCE_ADVICE,
+                    Action.start_time >= now - timedelta(hours=24),
+                )
+            ).all()
+            # "bad" = flagged bad by the source itself, not merely old (a pipeline pause would otherwise flag every asset at once)
+            actions.extend(maintenance_advisories(
+                tenant_id=tenant_id, decision_id=decision.id, now=now,
+                batteries=[BatteryHealth(b.asset_id, next((a.name for a in assets if a.id == b.asset_id), b.asset_id), b.soh_pct, b.warranty_cycles_remaining) for b in batteries_rows],
+                assets=[AssetDataHealth(r.asset_id, next((a.name for a in assets if a.id == r.asset_id), r.asset_id), "bad" if r.quality == "bad" else "fresh") for r in readings if r.metric == "power_kw"],
+                recently_raised={(row.asset_id, (row.envelope or {}).get("rule", "")) for row in recent},
+            ))
             for action in actions:
                 db.add(action)
             db.flush()

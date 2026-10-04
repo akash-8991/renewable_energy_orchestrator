@@ -30,14 +30,17 @@ DISPATCHABLE_ACTION_TYPES = {
     "curtail",  # renewable curtailment (setpoint dispatched to the solar/wind asset)
     "demand_response",  # load shed (setpoint dispatched to the consumer asset)
 }
-# maintenance_advice stays advisory-only: there is no maintenance data model
-# or scheduling system in this build for a command to act against (see
-# docs/SIMPLIFICATIONS.md) — the Asset agent can recommend one, nothing
-# downstream can execute it yet.
+# Advisory-only action types: shown to operators, never executed. A
+# maintenance_advice is a recommendation (policy/maintenance_advisory.py) —
+# the platform has no maintenance scheduling or work-order system, and no
+# command may act on one: no Signal is built, no Approval is created, and the
+# OT gateway refuses the command type outright.
+ADVISORY_ONLY_ACTION_TYPES = {"maintenance_advice"}
+assert not (ADVISORY_ONLY_ACTION_TYPES & DISPATCHABLE_ACTION_TYPES)
 
 
 def build_signal_for_action(db: Session, decision: Decision, action: Action) -> Signal | None:
-    if action.action_type not in DISPATCHABLE_ACTION_TYPES:
+    if action.action_type in ADVISORY_ONLY_ACTION_TYPES or action.action_type not in DISPATCHABLE_ACTION_TYPES:
         return None
     idempotency_key = f"{decision.id}:{action.id}"
     signal = Signal(

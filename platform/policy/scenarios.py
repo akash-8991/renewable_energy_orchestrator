@@ -1,17 +1,22 @@
 """Scenario engine (FR-SC-001/002/003, PRD E3).
 
-Simplification (docs/SIMPLIFICATIONS.md): a full stochastic MILP over many
-Monte Carlo trajectories is out of scope for this build's solve-time budget.
-Instead this module (a) names the same shock scenarios the edge-simulator
-can inject live (cloud cover, wind surge, price spike, battery outage, line
-congestion, demand shock) so the Scenario Lab and the live demo speak the
-same vocabulary, and (b) turns each asset's quantile forecast band into one
-*risk-adjusted deterministic* series — a well-established surrogate for
-full CVaR optimization: plan against `mean + risk_aversion * (q90 - q50)`
-instead of the raw mean, so higher `risk_aversion` in the tenant's
-ObjectivePolicy produces a more conservative plan without needing a
-stochastic solver. The solver module runs this alongside the plain q50
-series to produce the "risk-averse" alternative plan.
+Design rule: shocks are DETERMINISTIC NAMED SCENARIOS, never Monte Carlo
+trajectories. Each shock below is a fixed, named perturbation (cloud cover,
+wind surge, price spike, battery outage, line congestion, demand shock) —
+the same vocabulary the edge-simulator injects live and the Scenario Lab
+shows — and re-solving the same inputs under the same scenario always
+produces the same plan. That is what lets an operator, an approver or an
+auditor reproduce and compare "what would the plan be if X happened", and
+it is deliberately not a stochastic sampling of many random trajectories.
+tests/test_scenarios_deterministic.py enforces this (no random sampling in
+the scenario modules, identical reruns, exactly the named set).
+
+Uncertainty is carried separately, and also without sampling: each asset's
+quantile forecast band (q10/q50/q90) is turned into one *risk-adjusted
+deterministic* series — plan against `q50 + risk_aversion * (q90 - q50)`
+instead of the raw median — so a higher `risk_aversion` in the tenant's
+ObjectivePolicy produces a more conservative plan. The solver runs this
+alongside the plain q50 series to produce the "risk-averse" alternative.
 """
 
 from __future__ import annotations

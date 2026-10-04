@@ -64,16 +64,18 @@ PERMISSIONS: dict[str, set[str]] = {
     Role.OPERATOR: {
         "read:dashboard", "read:decisions", "read:audit",
         "approve:assigned", "acknowledge:signal", "override:bounded",
+        "manage:forecast_criteria",
     },
     Role.SENIOR_OPERATOR: {
         "read:dashboard", "read:decisions", "read:audit",
         "approve:assigned", "approve:four_eyes", "acknowledge:signal",
         "override:bounded", "pause:operations", "e_stop:trigger",
+        "manage:forecast_criteria",
     },
     Role.PORTFOLIO_MANAGER: {
         "read:dashboard", "read:decisions", "read:audit",
         "manage:objective_policy", "manage:scenarios", "read:economics", "ingest:files",
-        "manage:constraints",
+        "manage:constraints", "manage:forecast_criteria",
     },
     Role.OT_ADMIN: {
         "read:dashboard", "read:decisions", "read:audit",
@@ -82,11 +84,13 @@ PERMISSIONS: dict[str, set[str]] = {
     Role.MODEL_ADMIN: {
         "read:dashboard", "read:decisions", "read:audit",
         "manage:model_registry", "manage:model_eval", "deploy:model",
+        "manage:forecast_criteria",
     },
     Role.TENANT_ADMIN: {
         "read:dashboard", "read:decisions", "read:audit",
         "manage:users", "manage:settings", "manage:connectors",
         "manage:policies", "activate:connector", "ingest:files",
+        "manage:forecast_criteria",
     },
     Role.AUDITOR_DPO: {
         "read:dashboard", "read:decisions", "read:audit",

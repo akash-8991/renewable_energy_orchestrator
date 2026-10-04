@@ -14,6 +14,7 @@ the natural fit.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import uuid
@@ -71,11 +72,36 @@ def _validate(event: CloudEvent) -> tuple[bool, str | None]:
     return True, None
 
 
+def _recover_pending(bus: EventBus, group: str, consumer: str) -> int:
+    """Replay entries this consumer was handed but never acknowledged — e.g.
+    a batch that was in flight when the container restarted. `consume`
+    only ever asks for *new* entries (">"), so without this they would sit
+    in the group's pending list forever and the readings would be lost."""
+    recovered = 0
+    while not _stop_event.is_set():
+        resp = bus._redis.xreadgroup(group, consumer, {STREAM_TELEMETRY: "0"}, count=200)  # noqa: SLF001
+        entries = [(entry_id, fields) for _name, batch in (resp or []) for entry_id, fields in batch]
+        if not entries:
+            break
+        events = []
+        for entry_id, fields in entries:
+            if not fields:  # entry was trimmed from the stream; nothing left to process
+                bus.ack(STREAM_TELEMETRY, group, entry_id)
+                continue
+            events.append((entry_id, CloudEvent.from_dict(json.loads(fields["payload"]))))
+        if events:
+            recovered += _process_events(bus, group, events)
+    return recovered
+
+
 def _process_batch(bus: EventBus, group: str, consumer: str) -> int:
     events = bus.consume(STREAM_TELEMETRY, group, consumer, count=200, block_ms=5000)
     if not events:
         return 0
+    return _process_events(bus, group, events)
 
+
+def _process_events(bus: EventBus, group: str, events: list) -> int:
     db = SessionLocal()
     processed = 0
     try:
@@ -130,6 +156,12 @@ def run_forever(consumer_name: str = "api-ingestion-1") -> None:
     group = "api-ingestion"
     bus.ensure_group(STREAM_TELEMETRY, group)
     log.info("telemetry ingestion consumer started (group=%s consumer=%s)", group, consumer_name)
+    try:
+        recovered = _recover_pending(bus, group, consumer_name)
+        if recovered:
+            log.info("recovered %d unacknowledged telemetry readings from a previous run", recovered)
+    except Exception:
+        log.exception("could not recover pending telemetry entries, continuing with new ones")
     while not _stop_event.is_set():
         try:
             n = _process_batch(bus, group, consumer_name)

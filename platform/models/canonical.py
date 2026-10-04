@@ -914,8 +914,40 @@ class PlatformSettings(Base):
     # lets this tenant's users hit the "Log in with SSO" path.
     sso_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Operator-governed forecast criteria (reo_common/forecast_ml.py):
+    # {status: proposed|accepted|custom, model_mode: physics|ml|auto,
+    #  band_scale, min_training_hours, min_improvement_pct, retrain_hours,
+    #  decided_by, decided_at}. NULL = nothing decided yet -> the physics-
+    # based baseline keeps driving forecasts until an operator accepts the
+    # proposed criteria or sets their own.
+    forecast_criteria: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     updated_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 register_tenant_scoped(PlatformSettings)
+
+
+class ForecastModel(Base):
+    """A trained ML forecaster for one (asset, variable) — see
+    reo_common/forecast_ml.py. `status` is "trained", or "insufficient_data"
+    when there wasn't enough history yet (the row still records how much
+    there was, so the operator can see why no model is available)."""
+
+    __tablename__ = "forecast_models"
+    __table_args__ = (UniqueConstraint("tenant_id", "asset_id", "variable", name="uq_forecast_model_asset_variable"),)
+
+    id: Mapped[str] = uuid_pk()
+    tenant_id: Mapped[str] = tenant_fk()
+    asset_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("assets.id"), index=True)
+    variable: Mapped[str] = mapped_column(String(20))  # solar|wind|demand|price
+    algorithm: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(30))  # trained|insufficient_data
+    n_samples: Mapped[int] = mapped_column(Integer, default=0)
+    metrics: Mapped[dict] = mapped_column(JSONB, default=dict)  # mae_ml, mae_physics, improvement_pct, holdout_hours
+    params: Mapped[dict] = mapped_column(JSONB, default=dict)  # coefficients + per-hour residual bands
+    trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+register_tenant_scoped(ForecastModel)

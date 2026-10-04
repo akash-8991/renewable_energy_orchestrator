@@ -151,6 +151,16 @@ of its activation status, by design, not by omission — this is the one item on
   (`DATA_WATCH_DIR`, the same read-only mount the background folder-watcher scans) — and
   parses+publishes it as real telemetry, through the identical `parse_telemetry_file()`/
   `publish_readings()` path a CSV/JSON/XLSX file upload already goes through.
+- **Scheduled re-ingestion** (`backend/app/ingestion/connector_poller.py`): a thread in the api
+  process, not a separate scheduler service or job queue. Every `CONNECTOR_POLL_SECONDS` (default
+  60) it re-runs the ingest of every active `data_table`/`database`/`iot`/`market_energy_purchase`
+  connector, ingesting only what is new (SHA-256 content fingerprint, plus a per-asset/metric
+  `event_time` high-water mark for readings-shaped sources; both kept in Redis, so a Redis flush
+  causes one re-ingest) while continuing to monitor, and requests an on-demand decision cycle when
+  new rows arrived. The reference-dataset tables (renewable_generation, grid, …) are fingerprint-only:
+  their rows carry synthetic, re-based timestamps, so there is no meaningful `event_time` to compare. A real deployment would use a proper scheduler with per-connector intervals and CDC /
+  push (webhook, Kafka) for sources that support it; here one global interval applies and "changed"
+  means "content differs", not row-level change detection.
 - `database`: `endpoint_url` is instead a `postgresql://` connection string, egress-checked the
   same way an HTTP endpoint is (`guardrails/ssrf.py`'s `check_outbound_host`) but restricted to an
   explicit allow-list (currently just the reference `source-db` container — see
@@ -233,6 +243,23 @@ integration, Portfolio Operations, Connector Studio, Configuration Studio) with 
 declarative API (`BrowserRouter`/`Routes`/`Route`/`Link`/`NavLink`/`useNavigate`/`useLocation`),
 which v7 keeps backward-compatible — the data-router/loader APIs that would need real migration work
 were never used here.
+
+## Forecasting, scenarios and maintenance — design decisions
+
+- **Forecasts are a physics baseline *and* a trained ML model, chosen by the operator.** The ML model
+  is deliberately small and explainable — ridge regression (closed-form, deterministic) on cyclical
+  time features with the physics baseline as an input, bands from held-out residuals — not a deep or
+  probabilistic model, and it only knows what the platform has ingested (a week of hourly history
+  minimum). A production deployment would add weather/NWP features and a model registry with
+  champion/challenger promotion; here promotion is the operator accepting or setting criteria
+  (Policy Studio). Until they do, the physics baseline is used. See `docs/ARCHITECTURE.md`.
+- **Shocks are deterministic named scenarios, not Monte Carlo trajectories** — by design, not
+  because of the solve-time budget the earlier wording of this file implied. Reproducibility and
+  auditability of "what would the plan be if X" is the point; `tests/test_scenarios_deterministic.py`
+  guards it.
+- **Maintenance is advisory only.** There is no maintenance scheduling or work-order system, and no
+  command path for one. Advisories are rule-based (battery state of health / warranty cycles, source-
+  flagged bad telemetry) recommendations for a human.
 
 ## Configuration Studio and the same-day production-readiness closures
 

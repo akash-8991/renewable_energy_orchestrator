@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .ingestion import folder_watcher, telemetry_consumer
+from .ingestion import connector_poller, folder_watcher, telemetry_consumer
 from .routers import (
     actions,
     admin,
@@ -15,6 +15,7 @@ from .routers import (
     customers,
     decisions,
     exports,
+    forecasting,
     governance,
     health,
     ingestion,
@@ -32,9 +33,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s api %(name)s %(messa
 async def lifespan(_app: FastAPI):
     telemetry_consumer.start_background_thread()
     folder_watcher.start_background_thread()
+    connector_poller.start_background_thread()
     yield
     telemetry_consumer.stop()
     folder_watcher.stop()
+    connector_poller.stop()
 
 
 app = FastAPI(
@@ -75,3 +78,4 @@ app.include_router(observability.router)
 app.include_router(customers.router)
 app.include_router(operations.router)
 app.include_router(configuration.router)
+app.include_router(forecasting.router)

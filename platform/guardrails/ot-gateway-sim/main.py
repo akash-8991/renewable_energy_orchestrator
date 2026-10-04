@@ -111,8 +111,14 @@ def _telemetry_effect(command_type: str, setpoint_value: float) -> tuple[str, fl
     return "power_kw", setpoint_value
 
 
+ADVISORY_ONLY_COMMAND_TYPES = {"maintenance_advice"}  # mirrors policy/engine/execution.py — maintenance is advisory, never dispatched
+
+
 def _independent_validate(req: CommandRequest) -> tuple[bool, str | None]:
     now = datetime.now(timezone.utc)
+
+    if req.command_type in ADVISORY_ONLY_COMMAND_TYPES:
+        return False, f"{req.command_type} is advisory only — it can never be dispatched as a command"
 
     if _is_estopped(req.tenant_id):
         return False, "tenant e-stop is active"

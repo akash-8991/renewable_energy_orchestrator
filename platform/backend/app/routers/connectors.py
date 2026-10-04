@@ -8,6 +8,8 @@ and requires no counter-approval.
 
 from __future__ import annotations
 
+import hashlib
+import json as _json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -136,7 +138,21 @@ class ConnectorSummary(BaseModel):
     created_by: str | None
     activated_by: str | None
     last_test_result: dict | None
+    last_auto_ingest: dict | None = None  # outcome of the background poller's most recent pass over this connector
     created_at: str
+
+
+AUTO_INGEST_STATUS_KEY = "reo:connector:poll:{connector_id}"  # written by ingestion/connector_poller.py
+
+
+def _last_auto_ingest(c: Connector) -> dict | None:
+    if c.kind not in POLLABLE_CONNECTOR_KINDS:
+        return None
+    try:
+        raw = _fingerprint_store().get(AUTO_INGEST_STATUS_KEY.format(connector_id=c.id))
+    except Exception:
+        return None
+    return _json.loads(raw) if raw else None
 
 
 def _to_summary(db: Session, c: Connector) -> ConnectorSummary:
@@ -151,7 +167,8 @@ def _to_summary(db: Session, c: Connector) -> ConnectorSummary:
         id=c.id, name=c.name, kind=c.kind, endpoint_url=c.endpoint_url, method=c.method, status=c.status,
         auth_type=auth_type, credential_masked=masked, schema_mapping=c.schema_mapping or {},
         created_by=c.created_by, activated_by=c.activated_by,
-        last_test_result=c.last_test_result, created_at=c.created_at.isoformat(),
+        last_test_result=c.last_test_result, last_auto_ingest=_last_auto_ingest(c),
+        created_at=c.created_at.isoformat(),
     )
 
 
@@ -381,6 +398,95 @@ def parse_market_price_entries(payload: object) -> list[tuple[datetime, float]] 
     return parsed
 
 
+POLLABLE_CONNECTOR_KINDS = ("data_table", "database", "market_energy_purchase", "iot")
+
+_fingerprint_redis = None
+
+
+def _fingerprint_store():
+    global _fingerprint_redis
+    if _fingerprint_redis is None:
+        import redis
+
+        _fingerprint_redis = redis.from_url(settings.redis_url, decode_responses=True)
+    return _fingerprint_redis
+
+
+class _Unchanged(Exception):
+    """Raised by _ContentGate when the poller finds nothing new in a source:
+    its content is byte-identical to the last successful ingest, or every
+    reading in it is at/before what was already ingested."""
+
+
+def _parse_event_time(value) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+class _ContentGate:
+    """Decides, for the background poller, whether a source has anything
+    *new* — so stale data is never re-ingested while the source keeps being
+    monitored. Two checks, both kept in Redis per connector:
+
+    - `check` — a SHA-256 fingerprint of the fetched content. Identical to
+      the last successful ingest -> nothing new.
+    - `only_new` — for readings-shaped sources (generic telemetry files,
+      iot feeds): a per-(asset, metric) high-water mark of `event_time`.
+      Only readings strictly newer than it are ingested, so an appended
+      file contributes just its new rows, and a rewritten file that carries
+      nothing newer is treated as no new data.
+
+    Re-ingesting old data is not harmless for every source (the reference-
+    dataset path stamps its rows with fresh timestamps, so a repeat would
+    append a duplicate series). A manual "Ingest now" bypasses the skip
+    (`skip_unchanged=False`) but still records its fingerprint/marks so the
+    poller doesn't repeat it. `commit` runs only after a successful ingest,
+    so a failed ingest is retried on the next poll."""
+
+    def __init__(self, connector_id: str, skip_unchanged: bool):
+        self._key = f"reo:connector:fingerprint:{connector_id}"
+        self._mark_key = f"reo:connector:watermark:{connector_id}"
+        self._skip = skip_unchanged
+        self._pending: str | None = None
+        self._pending_marks: dict[str, str] = {}
+
+    def check(self, material: bytes) -> None:
+        digest = hashlib.sha256(material).hexdigest()
+        if self._skip and _fingerprint_store().get(self._key) == digest:
+            raise _Unchanged()
+        self._pending = digest
+
+    def only_new(self, readings: list[dict]) -> list[dict]:
+        marks = _fingerprint_store().hgetall(self._mark_key)
+        newest: dict[str, datetime] = {}
+        fresh: list[dict] = []
+        for reading in readings:
+            field = f"{reading.get('asset_id')}|{reading.get('metric')}"
+            when = _parse_event_time(reading.get("event_time"))
+            if when is not None and (field not in newest or when > newest[field]):
+                newest[field] = when
+            seen = _parse_event_time(marks[field]) if field in marks else None
+            if self._skip and when is not None and seen is not None and when <= seen:
+                continue  # at/before what this connector already ingested: stale
+            fresh.append(reading)
+        for field, when in newest.items():
+            seen = _parse_event_time(marks[field]) if field in marks else None
+            if seen is None or when > seen:
+                self._pending_marks[field] = when.isoformat()
+        if self._skip and readings and not fresh:
+            raise _Unchanged()
+        return fresh
+
+    def commit(self) -> None:
+        if self._pending is not None:
+            _fingerprint_store().set(self._key, self._pending)
+        if self._pending_marks:
+            _fingerprint_store().hset(self._mark_key, mapping=self._pending_marks)
+
+
 @router.post("/{connector_id}/ingest", response_model=ConnectorIngestResponse)
 def ingest_connector(
     connector_id: str,
@@ -391,11 +497,35 @@ def ingest_connector(
     connector = db.execute(select(Connector).where(Connector.id == connector_id)).scalar_one_or_none()
     if connector is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "connector not found")
-    if connector.kind not in ("data_table", "database", "market_energy_purchase", "iot"):
+    if connector.kind not in POLLABLE_CONNECTOR_KINDS:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"kind={connector.kind!r} is registration/reachability-test only (scada dispatch always goes through ot-gateway-sim, never a connector, by design)")
     if connector.status != "active":
         raise HTTPException(status.HTTP_409_CONFLICT, f"connector must be active to ingest (currently {connector.status}) — test then activate it first")
+    return run_connector_ingest(db, ctx, connector, body.table_name)
 
+
+def run_connector_ingest(
+    db: Session, ctx: AuthContext, connector: Connector, table_name: str | None = None, *, skip_unchanged: bool = False,
+) -> ConnectorIngestResponse:
+    """Fetch and ingest one active connector. Shared by the manual
+    `POST /connectors/{id}/ingest` and the background poller
+    (ingestion/connector_poller.py), which passes `skip_unchanged=True` and
+    gets `rows_queued=0, detail={"status": "no_new_data"}` back when the source
+    holds nothing newer than what was last ingested — the poller keeps
+    monitoring it but ingests nothing."""
+    gate = _ContentGate(connector.id, skip_unchanged)
+    try:
+        response = _ingest_from_source(db, ctx, connector, table_name, gate)
+    except _Unchanged:
+        gate.commit()  # remember this content so it isn't re-evaluated every minute either
+        return ConnectorIngestResponse(rows_queued=0, detail={"status": "no_new_data"})
+    gate.commit()
+    return response
+
+
+def _ingest_from_source(
+    db: Session, ctx: AuthContext, connector: Connector, table_name_override: str | None, gate: _ContentGate,
+) -> ConnectorIngestResponse:
     if connector.kind in ("market_energy_purchase", "iot"):
         ssrf_result = check_outbound_url(connector.endpoint_url)
         if not ssrf_result.allowed:
@@ -412,6 +542,8 @@ def ingest_connector(
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"could not fetch {connector.endpoint_url}: {exc}") from exc
         except ValueError as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"endpoint did not return valid JSON: {exc}") from exc
+
+        gate.check(_json.dumps(payload, sort_keys=True, default=str).encode("utf-8"))
 
         if connector.kind == "market_energy_purchase":
             # Expected shape: a bare array, or {"prices": [...]}, of
@@ -452,14 +584,13 @@ def ingest_connector(
         # value/unit shape a file upload or data_table connector accepts —
         # any smart-meter/sensor platform's export can be pointed at this
         # once adapted to that shape.
-        import json as _json
-
         try:
             readings = parse_telemetry_file("iot-connector.json", _json.dumps(payload).encode("utf-8"))
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
         if not readings:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "no valid rows found (expected columns: asset_id, metric, event_time, value, unit)")
+        readings = gate.only_new(readings)
 
         from reo_common.events import EventBus
 
@@ -467,7 +598,7 @@ def ingest_connector(
         return _finish_non_gating_ingest(db, ctx, connector, rows_queued=len(readings), lineage_id=lineage_id, detail=None)
 
     if connector.kind == "database":
-        table_name = body.table_name or (connector.schema_mapping or {}).get("table_name")
+        table_name = table_name_override or (connector.schema_mapping or {}).get("table_name")
         if not table_name:
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
                                  "table_name is required — pass it in the request body, or set schema_mapping.table_name when creating the connector")
@@ -478,6 +609,7 @@ def ingest_connector(
             rows = rows_from_db_table(connector.endpoint_url, table_name)
         except Exception as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"could not read table {table_name!r}: {exc}") from exc
+        gate.check(_json.dumps({"table": table_name, "rows": rows}, sort_keys=True, default=str).encode("utf-8"))
 
         table_key = normalize_table_key(table_name)
         result = ingest_reference_rows(db, ctx.tenant_id, table_key, rows, source_label=f"connector:{connector.name}:{table_name}")
@@ -526,6 +658,8 @@ def ingest_connector(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"path must end in .csv/.json/.xlsx (got {filename!r})")
         content = candidate.read_bytes()
 
+    gate.check(content)
+
     table_key = normalize_table_key(filename)
     if table_key in KNOWN_TABLE_KEYS:
         rows = rows_from_file(filename, content)
@@ -538,6 +672,7 @@ def ingest_connector(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     if not readings:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "no valid rows found (expected columns: asset_id, metric, event_time, value, unit)")
+    readings = gate.only_new(readings)
 
     from reo_common.events import EventBus
 

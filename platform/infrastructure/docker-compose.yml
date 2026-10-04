@@ -9,6 +9,7 @@ x-python-env: &python-env
   S3_SECRET_KEY: reo-minio-secret
   S3_REGION: eu-west-1
   DATA_WATCH_DIR: /data
+  CONNECTOR_POLL_SECONDS: ${CONNECTOR_POLL_SECONDS:-60}  # api re-reads active connectors this often; 0 disables
   ENVIRONMENT: local
   # Model gateway — shared across every service since both agent-worker (all
   # specialist agents) and api (document-intake vision, backend/app/routers

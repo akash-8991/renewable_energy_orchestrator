@@ -6,7 +6,7 @@ import Badge from "../components/Badge";
 interface Connector {
   id: string; name: string; kind: string; endpoint_url: string; method: string; status: string;
   auth_type: string | null; credential_masked: Record<string, string> | null; schema_mapping: Record<string, string>;
-  created_by: string | null; activated_by: string | null; last_test_result: any; created_at: string;
+  created_by: string | null; activated_by: string | null; last_test_result: any; last_auto_ingest?: { polled_at: string; outcome: string; rows: number; error?: string } | null; created_at: string;
 }
 
 const KIND_OPTIONS = [
@@ -181,7 +181,7 @@ export default function ConnectorStudio() {
       {data && (
         <div className="table-scroll">
         <table>
-          <thead><tr><th>Name</th><th>Kind</th><th>Endpoint</th><th>Status</th><th>Credential</th><th>Last test</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Kind</th><th>Endpoint</th><th>Status</th><th>Credential</th><th>Last test</th><th>Auto-ingest (every min)</th><th></th></tr></thead>
           <tbody>
             {data.map((c) => (
               <tr key={c.id}>
@@ -196,6 +196,11 @@ export default function ConnectorStudio() {
                 <td><Badge text={c.status} /></td>
                 <td className="muted">{c.credential_masked ? JSON.stringify(c.credential_masked) : "none"}</td>
                 <td>{c.last_test_result ? (c.last_test_result.http_status ?? (c.last_test_result.ssrf_allowed ? "reachable?" : "blocked")) : "—"}</td>
+                <td className="muted" style={{ fontSize: 12 }} title={c.last_auto_ingest?.error}>
+                  {c.last_auto_ingest
+                    ? `${c.last_auto_ingest.outcome === "ingested" ? `${c.last_auto_ingest.rows} new rows` : c.last_auto_ingest.outcome === "no_new_data" ? "monitoring · no new data" : c.last_auto_ingest.outcome} · ${new Date(c.last_auto_ingest.polled_at).toLocaleTimeString()}`
+                    : "—"}
+                </td>
                 <td className="row">
                   <button className="secondary" onClick={() => test.mutate(c.id)} disabled={test.isPending}>Test</button>
                   {c.status !== "active" && c.status !== "disabled" && (

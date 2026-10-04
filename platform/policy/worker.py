@@ -1,6 +1,7 @@
 """Optimizer worker entrypoint: runs a decision cycle on a fixed cadence and
-on-demand when a `reo.decision.cycle` event arrives (e.g. a future
-Scenario Lab "recompute now" action, or an event-driven replan trigger).
+on-demand when a `reo.decision.cycle` event arrives — published by the api
+when a data source delivers changed data (connector poller / folder watcher,
+trigger "event:data_change"; see reo_common.events.request_decision_cycle).
 
 PRD non-functional target is a 10-minute cadence; this defaults to a
 shorter interval (120s) so the demo/dev loop doesn't require a 10-minute
@@ -37,7 +38,10 @@ def main() -> None:
         for entry_id, event in events:
             log.info("on-demand decision cycle triggered by %s", event.correlation_id)
             try:
-                run_cycle(trigger=event.data.get("trigger", "on_demand"))
+                if run_cycle(trigger=event.data.get("trigger", "on_demand")):
+                    # this cycle already planned on the freshest data, so
+                    # the scheduled cadence restarts from now
+                    next_due = time.time() + CYCLE_SECONDS
             except Exception:
                 log.exception("on-demand cycle failed")
             bus.ack(STREAM_DECISION_CYCLE, "optimizer-worker", entry_id)

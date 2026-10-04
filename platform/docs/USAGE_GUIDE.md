@@ -24,6 +24,7 @@ notably SCADA/OT control), that's called out explicitly rather than glossed over
 11. [LLM / model gateway setup](#11-llm--model-gateway-setup)
 12. [Model gateway resilience (circuit breaker)](#12-model-gateway-resilience-circuit-breaker)
 13. [Real SSO / identity provider setup](#13-real-sso--identity-provider-setup)
+13b. [Forecast criteria: accept the proposal or set your own](#13b-forecast-criteria-accept-the-proposal-or-set-your-own) (also: deterministic scenarios, advisory-only maintenance)
 14. [RBAC roles reference](#14-rbac-roles-reference)
 15. [Autonomy mode & governance](#15-autonomy-mode--governance)
 16. [Exporting audit evidence](#16-exporting-audit-evidence)
@@ -140,6 +141,33 @@ Once `has_data_source` is `true`:
 curl -X POST http://localhost:8000/operations/start -H "Authorization: Bearer $TOKEN"
 ```
 
+### Automatic re-ingestion (every minute) and event-driven decisions
+
+Once a connector is **active**, the platform re-reads it **every 60 seconds** — you don't need to
+click "Ingest now" again. This covers `database`, `data_table`, `iot` and `market_energy_purchase`
+connectors. (A file dropped in the watched `data/` folder with no connector is still ingested within
+~10 seconds, but only a connector's poll requests an immediate decision — add a `data_table`
+connector for that file if you want changes to it to trigger one.)
+
+- **Only new data is ingested — stale data never is.** Each source's content is fingerprinted, and
+  for readings-shaped sources (generic telemetry files, `iot` feeds) the platform also remembers the
+  newest `event_time` per asset and metric, taking only readings strictly newer than that. A source
+  that holds nothing new shows **`monitoring · no new data`** in Connector Studio's *Auto-ingest*
+  column: it is still checked every minute, but nothing is ingested and no decision is triggered, until
+  genuinely new data appears. (Re-ingesting old reference data would otherwise append a duplicate
+  series every minute.) A manual **Ingest now** always ingests everything, and the poller won't repeat it.
+- **Changed data triggers a decision immediately.** When a poll brings in new rows, the optimizer
+  runs a decision cycle right away (the Decision Centre shows its trigger as `event:data_change`)
+  instead of waiting for the next scheduled cycle. A tenant that is idle (optimizer not started) just
+  ingests; no cycle is requested.
+- **To see "live" behaviour with a file source**, append rows with newer `event_time` values to the
+  file and watch *Auto-ingest* show `N new rows` (just the new ones) within a minute, then a new
+  decision appear. Re-saving the file with only old timestamps shows `monitoring · no new data`.
+- **A source that errors** (file removed, URL down, database unreachable) shows `error` with the
+  reason on hover, doesn't stop the other sources, and is retried on the next poll.
+- **Interval:** `CONNECTOR_POLL_SECONDS` in `infrastructure/docker-compose.yml` (default `60`; `0`
+  turns automatic polling off, leaving only the manual button).
+
 ## 5. Connecting a backend database
 
 For pulling telemetry/customer data out of a client's own operational database (billing system,
@@ -192,7 +220,7 @@ For a CSV/JSON/XLSX export that gets dropped somewhere on a schedule (an SFTP pu
 export, a shared drive), rather than a live database connection.
 
 **Two address forms** for `endpoint_url`:
-- An `http(s)://` URL — fetched fresh on every "Ingest now" (SSRF-checked: no loopback, link-local,
+- An `http(s)://` URL — fetched fresh on every "Ingest now" and on every automatic poll (SSRF-checked: no loopback, link-local,
   or cloud-metadata addresses).
 - A **bare filename** already sitting directly inside the platform's watched local folder
   (`DATA_WATCH_DIR`, default `/data` inside the containers — the same folder a background watcher
@@ -275,9 +303,8 @@ your portfolio, for every timestamp the feed covers — the next decision cycle 
 the synthetic price curve for those timestamps. This does **not** unlock Start Optimizer (§4) — it's
 real ingestion, just not one of the two kinds treated as "a connected data source."
 
-There's no built-in scheduler yet — "Ingest now" is a manual/on-demand pull (call it from a cron job
-or your own scheduler if you want it automatic; see `docs/PRODUCTION_READINESS_REVIEW.md` for this
-noted as a still-open enhancement beyond a same-session scope).
+You don't have to click "Ingest now" repeatedly: every active connector is re-read automatically
+every minute (see *Automatic re-ingestion* in §4).
 
 ## 9. Connecting IoT telemetry sources
 
@@ -440,14 +467,42 @@ authorization-code exchange will be rejected by the IdP itself. First login from
 (`sub` claim) auto-provisions a local account — linked by email if one already matches, otherwise
 created fresh with the `viewer` role (promote it afterward via §2/§14 if it needs more).
 
+## 13b. Forecast criteria: accept the proposal or set your own
+
+Forecasts are a physics-based baseline, and the platform also trains an ML model per asset from the
+data you've ingested. **Policy Studio → Forecast criteria** shows, per asset, whether a model is
+trained, how much history it used, and its error on held-out hours **versus the physics baseline**.
+Then you decide:
+
+- **Accept proposed criteria** — adopts the platform's proposal: use the ML model only where it beats
+  the baseline by at least 5%, 1.0× uncertainty band, retrain daily, ≥ 1 week of history.
+- **Set criteria…** — your own: *Forecast model* (`physics` / `auto` / `ml`), *Uncertainty band ×*
+  (wider = more conservative plan), *Min history*, *Min improvement*, *Retrain every*.
+- **Retrain now** — retrains immediately from everything ingested so far (the optimizer also does it
+  on its own schedule).
+
+Until you accept or set criteria, the **physics baseline stays in use** — a freshly trained model
+never takes over by itself. A model needs history to exist: connect a data source (§5/§6) and let it
+accumulate, or ingest a historical file such as `03_renewable_generation.csv`. API:
+`GET/PUT /forecasting/criteria`, `POST /forecasting/criteria/accept`, `POST /forecasting/retrain`
+(`manage:forecast_criteria`: operator, senior operator, portfolio manager, model admin, tenant admin).
+
+**Scenarios stay deterministic.** The six named shocks (cloud cover, wind surge, price spike, battery
+outage, line congestion, demand shock) are fixed what-ifs, not Monte Carlo runs — the same inputs give
+the same comparison every time.
+
+**Maintenance is advisory only.** The platform may recommend maintenance (Action Tickets, status
+`advisory`: battery health/warranty, an asset reporting bad data) but never schedules, approves or
+dispatches it — there is nothing to approve, and the OT gateway refuses such a command outright.
+
 ## 14. RBAC roles reference
 
 | Role | Can do |
 |---|---|
 | `viewer` | Read dashboard, decisions, audit |
-| `operator` | + approve assigned items, acknowledge signals, bounded override |
-| `senior_operator` | + four-eyes approval, pause operations, trigger e-stop |
-| `portfolio_manager` | + manage objective policy/scenarios/constraints, ingest files, read economics |
+| `operator` | + approve assigned items, acknowledge signals, bounded override, accept/set forecast criteria |
+| `senior_operator` | + four-eyes approval, pause operations, trigger e-stop, accept/set forecast criteria |
+| `portfolio_manager` | + manage objective policy/scenarios/constraints, ingest files, read economics, accept/set forecast criteria |
 | `ot_admin` | + manage adapters/command envelopes, read control readiness |
 | `model_admin` | + manage model registry/eval, deploy models, trigger evaluation runs |
 | `tenant_admin` | + manage users, settings (Configuration Studio), connectors, policies, activate connectors |
@@ -589,7 +644,7 @@ reference (if any). Under "Set new policy," pick a new mode from the dropdown �
 validation in §15 — then click **Apply**. Further down, the "Emergency stop" card's single button
 toggles e-stop on/off immediately, regardless of the current autonomy mode. The same page's
 "Optimality criteria (objective policy)" card lets you adjust the cost/imbalance/degradation/
-carbon/curtailment/reliability weights and click **Apply (creates a new version)**.
+carbon/curtailment/reliability weights and click **Apply (creates a new version)**. The **Forecast criteria** card (§13b) is where you accept or set how forecasts are produced.
 
 ### Export audit evidence
 

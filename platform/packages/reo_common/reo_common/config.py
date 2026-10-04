@@ -91,6 +91,10 @@ class Settings(BaseSettings):
 
     # Data ingestion
     data_watch_dir: str = "/data"
+    # How often the api re-reads every active data source (database,
+    # data_table, iot, market_energy_purchase connectors) and, if the data
+    # changed, triggers an on-demand decision cycle. 0 disables polling.
+    connector_poll_seconds: int = 60
 
     # OT command gateway (separate service/trust boundary — see docs/ARCHITECTURE.md)
     ot_gateway_url: str = "http://ot-gateway-sim:8010"

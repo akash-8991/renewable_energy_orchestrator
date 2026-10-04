@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import Badge from "../components/Badge";
+import ForecastCriteriaPanel from "../components/ForecastCriteriaPanel";
 
 interface AutonomyPolicy {
   id: string; scope: string; mode: string; max_action_risk: string; safety_case_ref: string | null; effective_from: string;
@@ -80,7 +81,7 @@ export default function PolicyStudio() {
   return (
     <div>
       <h2 style={{ fontSize: 15 }}>Policy Studio</h2>
-      <p className="muted">Set the portfolio-wide autonomy mode, and the emergency stop.</p>
+      <p className="muted">Set the portfolio-wide autonomy mode, the forecast criteria, and the emergency stop.</p>
       {error && <div className="error-banner">{error}</div>}
 
       <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
@@ -155,6 +156,8 @@ export default function PolicyStudio() {
         </div>
         <button onClick={() => setObjectivePolicy.mutate()} disabled={setObjectivePolicy.isPending}>Apply (creates a new version)</button>
       </div>
+
+      <ForecastCriteriaPanel />
 
       <div className="card" style={{ maxWidth: 480, borderColor: estopActive ? "var(--red)" : undefined }}>
         <h3>Emergency stop</h3>

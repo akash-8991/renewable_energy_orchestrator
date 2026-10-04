@@ -110,3 +110,56 @@ STREAM_DECISION_READY = "reo.decision.ready"
 STREAM_SIGNAL_STATE = "reo.signal.state"
 STREAM_DASHBOARD_FANOUT = "reo.dashboard.fanout"
 STREAM_EVAL_REQUEST = "reo.eval.request"
+
+
+def request_decision_cycle(bus: EventBus, tenant_id: str | None, trigger: str, **data) -> str:
+    """Ask the optimizer-worker for an immediate decision cycle (rather than
+    waiting for its next scheduled tick). `trigger` ends up on the Decision
+    row, e.g. "event:data_change", so the ledger shows why the cycle ran."""
+    return bus.publish(STREAM_DECISION_CYCLE, CloudEvent(
+        type="reo.decision.cycle.requested", source="api", tenant_id=tenant_id,
+        data={"trigger": trigger, **data}, correlation_id=new_correlation_id("trg"),
+    ))
+
+
+def _id_key(entry_id: str) -> tuple[int, int]:
+    ms, _, seq = entry_id.partition("-")
+    return int(ms), int(seq or 0)
+
+
+def stream_head(bus: EventBus, stream: str) -> str | None:
+    """ID of the newest entry in `stream` right now (None if it has none)."""
+    try:
+        head = bus._redis.xinfo_stream(stream).get("last-generated-id")  # noqa: SLF001
+    except Exception:
+        return None
+    return head if head and head != "0-0" else None
+
+
+def wait_until_processed(bus: EventBus, stream: str, group: str, up_to_id: str | None, timeout_seconds: float = 20.0) -> bool:
+    """Block until `group` has consumed *and acknowledged* every entry in
+    `stream` up to and including `up_to_id` (or the timeout passes). Used
+    before triggering a decision cycle so it reads the readings that were
+    just ingested — telemetry reaches the database through the stream's
+    consumer, asynchronously to whoever published it. Waiting for "nothing
+    pending at all" would never finish while other producers (the edge
+    simulator) keep the stream busy, hence the cut-off at a specific ID.
+    Returns False on timeout / when state can't be read (caller proceeds
+    anyway — the cycle then plans on slightly older data, never none)."""
+    import time
+
+    if up_to_id is None:
+        return True
+    target = _id_key(up_to_id)
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            info = next((g for g in bus._redis.xinfo_groups(stream) if g.get("name") == group), None)  # noqa: SLF001
+            if info is not None and _id_key(info["last-delivered-id"]) >= target:
+                pending = bus._redis.xpending(stream, group)  # noqa: SLF001
+                if not pending["pending"] or _id_key(pending["min"]) > target:
+                    return True
+        except Exception:
+            return False
+        time.sleep(0.25)
+    return False

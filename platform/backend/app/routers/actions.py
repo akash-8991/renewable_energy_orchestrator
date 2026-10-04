@@ -40,13 +40,15 @@ class ActionTicket(BaseModel):
     decision_id: str
     decision_cycle_id: str
     decision_status: str
-    ticket_status: str  # pending|approved|rejected|modified|held|expired|dispatched|acknowledged|failed
+    ticket_status: str  # pending|approved|rejected|modified|held|expired|dispatched|acknowledged|failed|advisory (maintenance advice — never executed)
     signal_state: str | None
     approval_outcome: str | None
     created_at: str
 
 
-def _ticket_status(signal: Signal | None, approval: Approval | None) -> str:
+def _ticket_status(signal: Signal | None, approval: Approval | None, action_type: str = "") -> str:
+    if action_type == "maintenance_advice":
+        return "advisory"  # advice for a human: no signal, no approval, never executed
     if approval is not None and approval.outcome in ("rejected", "expired"):
         return approval.outcome
     if signal is not None:
@@ -104,7 +106,7 @@ def list_actions(
         asset = assets.get(a.asset_id) if a.asset_id else None
         signal = signals_by_action.get(a.id)
         approval = approvals_by_action.get(a.id)
-        ticket_status = _ticket_status(signal, approval)
+        ticket_status = _ticket_status(signal, approval, a.action_type)
         if status and ticket_status != status:
             continue
         out.append(ActionTicket(
