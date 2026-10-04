@@ -21,8 +21,8 @@ export default function DecisionCentre() {
 
   return (
     <div>
-      <div className="row-between" style={{ marginBottom: 14 }}>
-        <h2 style={{ fontSize: 15, margin: 0 }}>Decision Ledger</h2>
+      <div className="page-header">
+        <h2 className="page-title flush">Decision Ledger</h2>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">all statuses</option>
           <option value="proposed">proposed</option>

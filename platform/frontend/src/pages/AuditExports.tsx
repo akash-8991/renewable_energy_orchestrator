@@ -32,7 +32,8 @@ export default function AuditExports() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Audit & Exports</h2>
+      <h2 className="page-title">Audit & Exports</h2>
+      <p className="page-intro">Verify the tamper-evident audit chain and export governed evidence.</p>
       <div className="tabs">
         <div className={"tab" + (tab === "audit" ? " active" : "")} onClick={() => setTab("audit")}>Audit Chain</div>
         <div className={"tab" + (tab === "exports" ? " active" : "")} onClick={() => setTab("exports")}>Governed Export</div>
@@ -53,7 +54,7 @@ export default function AuditExports() {
                   <td>{new Date(e.created_at).toLocaleString()}</td>
                   <td>{e.event_type}</td>
                   <td>{e.actor_label}</td>
-                  <td className="mono" style={{ fontSize: 10 }}>{e.hash.slice(0, 12)}...</td>
+                  <td className="mono" style={{ fontSize: 12 }}>{e.hash.slice(0, 12)}...</td>
                 </tr>
               ))}
             </tbody>
@@ -63,21 +64,24 @@ export default function AuditExports() {
       )}
 
       {tab === "exports" && (
-        <div className="card" style={{ maxWidth: 480 }}>
-          <p className="muted">
+        <div className="card-grid"><div className="card">
+          <h3>Governed export</h3>
+          <p className="card-help">
             Generates a governed Excel workbook (Decisions/Signals/Reasoning/Approvals/Acknowledgements/Export
             Metadata sheets) for the last 500 decisions. Requires the Auditor/DPO role.
           </p>
+          <div className="card-footer" style={{ marginTop: 0, paddingTop: 0 }}>
           <button onClick={() => requestExport.mutate()} disabled={requestExport.isPending || (!!polling && activeExport?.status !== "complete" && activeExport?.status !== "failed")}>
             Generate export
           </button>
+          </div>
           {activeExport && (
             <div style={{ marginTop: 14 }}>
               <div className="row">
                 <Badge text={activeExport.status} />
                 {activeExport.row_count !== null && <span className="muted">{activeExport.row_count} rows</span>}
               </div>
-              {activeExport.checksum_sha256 && <div className="mono muted" style={{ fontSize: 11, marginTop: 6 }}>sha256 {activeExport.checksum_sha256}</div>}
+              {activeExport.checksum_sha256 && <div className="mono muted" style={{ fontSize: 12, marginTop: 6 }}>sha256 {activeExport.checksum_sha256}</div>}
               {activeExport.download_url && (
                 <a href={activeExport.download_url} style={{ display: "inline-block", marginTop: 10 }}>
                   <button>Download .xlsx</button>
@@ -85,7 +89,7 @@ export default function AuditExports() {
               )}
             </div>
           )}
-        </div>
+        </div></div>
       )}
     </div>
   );

@@ -43,7 +43,7 @@ export default function Layout() {
           </NavLink>
         ))}
         <div style={{ flex: 1 }} />
-        <div style={{ padding: "10px", fontSize: 12 }} className="muted">
+        <div style={{ padding: "10px", fontSize: 13 }} className="muted">
           {roles.join(", ") || "no roles"}
         </div>
         <button className="secondary" onClick={logout}>

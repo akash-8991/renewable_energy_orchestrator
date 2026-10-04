@@ -95,13 +95,13 @@ function CallMetricsTab() {
           <tbody>
             {calls.map((c) => (
               <tr key={c.id}>
-                <td className="mono" style={{ fontSize: 11 }}>{new Date(c.created_at).toLocaleString()}</td>
+                <td className="mono" style={{ fontSize: 12 }}>{new Date(c.created_at).toLocaleString()}</td>
                 <td>{c.agent}</td>
                 <td className="muted">{c.provider}/{c.model}</td>
                 <td>{c.latency_ms.toFixed(0)}ms</td>
                 <td><Badge text={c.schema_valid ? "valid" : "invalid"} /></td>
                 <td>{c.retried ? <Badge text="retried" /> : "—"}</td>
-                <td className="muted" style={{ fontSize: 11, whiteSpace: "nowrap" }}>{c.error || ""}</td>
+                <td className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{c.error || ""}</td>
               </tr>
             ))}
           </tbody>
@@ -136,7 +136,7 @@ function EvaluationTab() {
 
   return (
     <div>
-      <p className="muted" style={{ fontSize: 12 }}>
+      <p className="muted" style={{ fontSize: 13 }}>
         Runs a fixed set of labelled scenarios against the specialist agents and scores their behaviour against
         known-correct expectations (e.g. "must flag a HIGH finding when telemetry is mostly stale"). Behavioral
         cases are skipped, not failed, when the active model is the mock gateway — mock fills only schema-required
@@ -163,7 +163,7 @@ function EvaluationTab() {
               {run.results.map((r, i) => (
                 <div key={i} className="finding">
                   <Badge text={r.outcome} /> <strong>{r.case}</strong> <span className="muted">({r.agent}, {r.tier})</span>
-                  <div className="muted" style={{ fontSize: 12 }}>{r.detail}</div>
+                  <div className="muted" style={{ fontSize: 13 }}>{r.detail}</div>
                 </div>
               ))}
             </div>
@@ -179,8 +179,8 @@ export default function AgentObservability() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Agent Observability</h2>
-      <p className="muted">
+      <h2 className="page-title">Agent Observability</h2>
+      <p className="page-intro">
         Live call health for every specialist agent and the document-intake vision path, plus a fixed-scenario
         evaluation suite — the workspace behind the model_admin role's registry/eval/deploy permissions.
       </p>

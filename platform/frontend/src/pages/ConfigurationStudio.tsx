@@ -65,95 +65,95 @@ export default function ConfigurationStudio() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Configuration Studio</h2>
-      <p className="muted">
-        Runtime-configurable settings behind the platform's production-readiness punch list — no
-        redeploy needed. Changes take effect on the next decision cycle / model call and are
-        audit-logged like any other governance action. Requires the <code>manage:settings</code>{" "}
-        permission (Tenant Admin) or <code>manage:platform_config</code> (Platform Admin) to save.
+      <h2 className="page-title">Configuration Studio</h2>
+      <p className="page-intro">
+        Runtime settings — no redeploy needed. Changes take effect on the next decision cycle or model call
+        and are audit-logged like any other governance action. Saving requires the Tenant Admin or
+        Platform Admin role.
       </p>
       {error && <div className="error-banner">{error}</div>}
       {saved && <div className="evidence-box"><div className="finding">Configuration saved.</div></div>}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3>Live weather feed</h3>
-        <p className="muted" style={{ fontSize: 12 }}>
-          Replaces the synthetic solar/wind forecast curves with real forecast data from{" "}
-          <a href="https://open-meteo.com" target="_blank" rel="noreferrer">Open-Meteo</a> (free,
-          no API key). Falls back to the synthetic model automatically if the feed is disabled, the
-          site coordinates aren't set, or the API call fails for any reason.
-        </p>
-        <label className="row" style={{ gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={form.live_weather_enabled}
-                 onChange={(e) => set("live_weather_enabled", e.target.checked)} />
-          Enable live weather feed
-        </label>
-        <div className="row" style={{ gap: 16, marginTop: 10, flexWrap: "wrap" }}>
-          <div className="field">
-            <label>Site latitude</label>
-            <input type="number" step="any" value={form.weather_site_lat ?? ""}
-                   onChange={(e) => set("weather_site_lat", e.target.value === "" ? null : Number(e.target.value))}
-                   placeholder="e.g. 51.5074" style={{ width: 160 }} />
+      <div className="card-grid uniform short">
+        <div className="card">
+          <h3>Live weather feed</h3>
+          <p className="card-help">
+            Replaces the synthetic solar/wind forecast curves with real forecast data from{" "}
+            <a href="https://open-meteo.com" target="_blank" rel="noreferrer">Open-Meteo</a> (free, no API key). Falls
+            back to the synthetic model automatically if the feed is disabled, the site coordinates aren't set, or the
+            API call fails.
+          </p>
+          <div className="card-body">
+            <label className="check">
+              <input type="checkbox" checked={form.live_weather_enabled} onChange={(e) => set("live_weather_enabled", e.target.checked)} />
+              Enable live weather feed
+            </label>
+            <div className="field-row" style={{ marginTop: 14 }}>
+              <div className="field">
+                <label>Site latitude</label>
+                <input type="number" step="any" value={form.weather_site_lat ?? ""} placeholder="e.g. 51.5074"
+                       onChange={(e) => set("weather_site_lat", e.target.value === "" ? null : Number(e.target.value))} />
+              </div>
+              <div className="field">
+                <label>Site longitude</label>
+                <input type="number" step="any" value={form.weather_site_lon ?? ""} placeholder="e.g. -0.1278"
+                       onChange={(e) => set("weather_site_lon", e.target.value === "" ? null : Number(e.target.value))} />
+              </div>
+            </div>
           </div>
-          <div className="field">
-            <label>Site longitude</label>
-            <input type="number" step="any" value={form.weather_site_lon ?? ""}
-                   onChange={(e) => set("weather_site_lon", e.target.value === "" ? null : Number(e.target.value))}
-                   placeholder="e.g. -0.1278" style={{ width: 160 }} />
+        </div>
+
+        <div className="card">
+          <h3>Model gateway resilience</h3>
+          <p className="card-help">
+            A circuit breaker and per-call timeout around every LLM call, so a slow or down provider degrades a decision
+            cycle gracefully instead of stalling it. After consecutive failures, later calls fail immediately until the
+            cooldown elapses.
+          </p>
+          <div className="card-body">
+            <label className="check">
+              <input type="checkbox" checked={form.gateway_circuit_breaker_enabled} onChange={(e) => set("gateway_circuit_breaker_enabled", e.target.checked)} />
+              Enable circuit breaker
+            </label>
+            <div className="field-row" style={{ marginTop: 14 }}>
+              <div className="field">
+                <label>Call timeout (s)</label>
+                <input type="number" min={1} max={300} value={form.gateway_timeout_seconds} onChange={(e) => set("gateway_timeout_seconds", Number(e.target.value))} />
+              </div>
+              <div className="field">
+                <label>Failure threshold</label>
+                <input type="number" min={1} max={50} value={form.gateway_failure_threshold} onChange={(e) => set("gateway_failure_threshold", Number(e.target.value))} />
+              </div>
+              <div className="field">
+                <label>Cooldown (s)</label>
+                <input type="number" min={5} max={3600} value={form.gateway_cooldown_seconds} onChange={(e) => set("gateway_cooldown_seconds", Number(e.target.value))} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>Identity provider (SSO)</h3>
+          <p className="card-help">
+            {form.sso_available
+              ? "An OIDC identity provider is configured for this deployment. Choose whether this tenant's users may log in via SSO, in addition to email and password."
+              : "No OIDC identity provider is configured for this deployment (OIDC_ISSUER is unset), so this setting has no effect until one is."}
+          </p>
+          <div className="card-body">
+            <label className="check">
+              <input type="checkbox" checked={form.sso_enabled} disabled={!form.sso_available} onChange={(e) => set("sso_enabled", e.target.checked)} />
+              Enable SSO login for this tenant
+            </label>
           </div>
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3>Model gateway resilience</h3>
-        <p className="muted" style={{ fontSize: 12 }}>
-          A circuit breaker + per-call timeout around every LLM call, so a slow or down provider
-          degrades a decision cycle gracefully instead of stalling it. Opens after consecutive
-          failures for this tenant; later calls fail immediately (zero tokens spent) until the
-          cooldown elapses.
-        </p>
-        <label className="row" style={{ gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={form.gateway_circuit_breaker_enabled}
-                 onChange={(e) => set("gateway_circuit_breaker_enabled", e.target.checked)} />
-          Enable circuit breaker
-        </label>
-        <div className="row" style={{ gap: 16, marginTop: 10, flexWrap: "wrap" }}>
-          <div className="field">
-            <label>Call timeout (seconds)</label>
-            <input type="number" min={1} max={300} value={form.gateway_timeout_seconds}
-                   onChange={(e) => set("gateway_timeout_seconds", Number(e.target.value))} style={{ width: 120 }} />
-          </div>
-          <div className="field">
-            <label>Failure threshold</label>
-            <input type="number" min={1} max={50} value={form.gateway_failure_threshold}
-                   onChange={(e) => set("gateway_failure_threshold", Number(e.target.value))} style={{ width: 120 }} />
-          </div>
-          <div className="field">
-            <label>Cooldown (seconds)</label>
-            <input type="number" min={5} max={3600} value={form.gateway_cooldown_seconds}
-                   onChange={(e) => set("gateway_cooldown_seconds", Number(e.target.value))} style={{ width: 120 }} />
-          </div>
-        </div>
+      <div className="row" style={{ gap: 14 }}>
+        <button onClick={onSubmit} disabled={save.isPending}>{save.isPending ? "Saving..." : "Save configuration"}</button>
+        <span className="muted" style={{ fontSize: 13 }}>
+          {form.updated_by ? `Last updated by ${form.updated_by} at ${new Date(form.updated_at).toLocaleString()}` : "Not yet customized for this tenant — showing defaults."}
+        </span>
       </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
-        <h3>Identity provider (SSO)</h3>
-        <p className="muted" style={{ fontSize: 12 }}>
-          {form.sso_available
-            ? "An OIDC identity provider is configured for this deployment. Toggle whether this tenant's users may log in via SSO, in addition to email/password."
-            : "No OIDC identity provider is configured for this deployment (OIDC_ISSUER is unset) — this toggle has no effect until one is. See docs/DEPLOYMENT.md's SSO section."}
-        </p>
-        <label className="row" style={{ gap: 8, alignItems: "center" }}>
-          <input type="checkbox" checked={form.sso_enabled} disabled={!form.sso_available}
-                 onChange={(e) => set("sso_enabled", e.target.checked)} />
-          Enable SSO login for this tenant
-        </label>
-      </div>
-
-      <button onClick={onSubmit} disabled={save.isPending}>{save.isPending ? "Saving..." : "Save configuration"}</button>
-      <p className="muted" style={{ fontSize: 11, marginTop: 10 }}>
-        {form.updated_by ? `Last updated by ${form.updated_by} at ${new Date(form.updated_at).toLocaleString()}` : "Not yet customized for this tenant — showing defaults."}
-      </p>
     </div>
   );
 }

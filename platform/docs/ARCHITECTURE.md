@@ -65,6 +65,16 @@ active connector / dropped file ──(every 60 s, only if content changed)─�
                                   reo.decision.cycle ──▶ optimizer-worker: snapshot → forecast → solve → Decision
 ```
 
+### Dashboard UI conventions
+
+One stylesheet (`frontend/src/styles.css`) defines the whole look, so pages stay consistent: every page
+opens with `.page-title` + `.page-intro`; cards share one style (`.card`, with `h3` title, `.card-help`
+text, `.card-body`, `.card-footer`); cards live in `.card-grid` (equal widths; `.uniform` /
+`.uniform.short` give every card the exact same fixed size, scrolling inside the body rather than
+clipping, and stacking to content height on phones). Typography is Inter (bundled via
+`@fontsource-variable/inter` — no external font request) at a 15px base, with nothing smaller than 12px.
+The UI contains no references to the spec documents or demo scripts; that traceability lives in these docs.
+
 ### Production hardening (summary)
 
 Authentication re-reads the account on **every request** (`app/deps.py`): a signed token only proves

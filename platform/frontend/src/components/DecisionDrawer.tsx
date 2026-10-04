@@ -34,7 +34,7 @@ function ScenarioComparisonTab({ decisionId }: { decisionId: string }) {
 
   return (
     <div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+      <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
         Each row is a full 24h re-solve of this same decision cycle under one named variation — a forward
         simulation, not something that has actually happened. Δ objective is relative to BASELINE (lower is better).
       </p>
@@ -57,13 +57,13 @@ function ScenarioComparisonTab({ decisionId }: { decisionId: string }) {
               <td>{fmtKwh(r.total_export_kwh)} kWh</td>
               <td>{r.total_curtailment_kwh > 0 ? <span style={{ color: "var(--amber)" }}>{fmtKwh(r.total_curtailment_kwh)} kWh</span> : "—"}</td>
               <td>{r.total_shed_kwh > 0 ? <span style={{ color: "var(--amber)" }}>{fmtKwh(r.total_shed_kwh)} kWh</span> : "—"}</td>
-              <td className="muted" style={{ fontSize: 11 }}>{r.binding_constraints.length}</td>
+              <td className="muted" style={{ fontSize: 12 }}>{r.binding_constraints.length}</td>
             </tr>
           ))}
         </tbody>
       </table>
       </div>
-      {baseline && <p className="muted" style={{ fontSize: 11 }}>Baseline objective: {baseline.objective_value.toFixed(0)}</p>}
+      {baseline && <p className="muted" style={{ fontSize: 12 }}>Baseline objective: {baseline.objective_value.toFixed(0)}</p>}
     </div>
   );
 }
@@ -152,7 +152,7 @@ export default function DecisionDrawer({ id, onClose }: { id: string; onClose: (
                       <Badge text={finding.severity} /> {finding.finding}
                     </div>
                   ))}
-                  {f.findings?.length === 0 && <div className="muted" style={{ fontSize: 12 }}>no findings raised</div>}
+                  {f.findings?.length === 0 && <div className="muted" style={{ fontSize: 13 }}>no findings raised</div>}
                 </div>
               ))}
               {data.reasoning?.governance && (

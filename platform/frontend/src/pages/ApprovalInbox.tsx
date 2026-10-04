@@ -41,8 +41,8 @@ export default function ApprovalInbox() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Approval Inbox</h2>
-      <p className="muted">Actions awaiting human sign-off before they can be dispatched to the OT command gateway.</p>
+      <h2 className="page-title">Approval Inbox</h2>
+      <p className="page-intro">Actions awaiting human sign-off before they can be dispatched to the OT command gateway.</p>
       {!canDecide && (
         <div className="empty-state">
           Your role can view this queue but can't decide approvals — that needs the Operator or

@@ -69,7 +69,7 @@ export default function PortfolioTrendChart() {
             <button
               key={p.label}
               className={presetMinutes === p.minutes && !customRange ? "" : "secondary"}
-              style={{ padding: "5px 10px", fontSize: 12 }}
+              style={{ padding: "5px 10px", fontSize: 13 }}
               onClick={() => {
                 setCustomRange(null);
                 setPresetMinutes(p.minutes);
@@ -80,7 +80,7 @@ export default function PortfolioTrendChart() {
           ))}
           <input
             type="datetime-local"
-            style={{ fontSize: 12, padding: "5px 8px" }}
+            style={{ fontSize: 13, padding: "5px 8px" }}
             value={customRange ? toLocalInputValue(new Date(customRange.since)) : ""}
             onChange={(e) => {
               if (!e.target.value) return;
@@ -89,10 +89,10 @@ export default function PortfolioTrendChart() {
               setCustomRange({ since, until });
             }}
           />
-          <span className="muted" style={{ fontSize: 12 }}>to</span>
+          <span className="muted" style={{ fontSize: 13 }}>to</span>
           <input
             type="datetime-local"
-            style={{ fontSize: 12, padding: "5px 8px" }}
+            style={{ fontSize: 13, padding: "5px 8px" }}
             value={customRange ? toLocalInputValue(new Date(customRange.until)) : ""}
             onChange={(e) => {
               if (!e.target.value) return;
@@ -127,13 +127,13 @@ export default function PortfolioTrendChart() {
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#e1e5ec" />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#667085" }} minTickGap={30} />
-            <YAxis tick={{ fontSize: 11, fill: "#667085" }} width={56} label={{ value: "kW", angle: -90, position: "insideLeft", fontSize: 11, fill: "#667085" }} />
+            <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#475467" }} minTickGap={30} />
+            <YAxis tick={{ fontSize: 12, fill: "#475467" }} width={56} label={{ value: "kW", angle: -90, position: "insideLeft", fontSize: 12, fill: "#475467" }} />
             <Tooltip
-              contentStyle={{ background: "#fff", border: "1px solid #e1e5ec", borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ background: "#fff", border: "1px solid #e1e5ec", borderRadius: 8, fontSize: 13 }}
               formatter={(value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 0 }) + " kW"}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 13 }} />
             <Area type="monotone" dataKey="generation_kw" name="Generation" stroke="#16a34a" fill="url(#genGradient)" strokeWidth={2} />
             <Area type="monotone" dataKey="demand_kw" name="Demand" stroke="#2563eb" fill="url(#demandGradient)" strokeWidth={2} />
             <Area type="monotone" dataKey="battery_kw" name="Battery net" stroke="#7c3aed" fill="url(#battGradient)" strokeWidth={2} />

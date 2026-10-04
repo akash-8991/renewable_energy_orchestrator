@@ -103,11 +103,11 @@ export default function ConnectorStudio() {
 
   return (
     <div>
-      <div className="row-between">
-        <h2 style={{ fontSize: 15 }}>Connector Studio</h2>
+      <div className="page-header" style={{ marginBottom: 6 }}>
+        <h2 className="page-title flush">Connector Studio</h2>
         <button onClick={() => setShowForm((v) => !v)}>{showForm ? "Cancel" : "+ New connector"}</button>
       </div>
-      <p className="muted">
+      <p className="page-intro">
         Register the APIs agents use to act on the outside world — a market energy purchase API, a SCADA API, an
         IoT device API — or a data table path/link for the platform to ingest as telemetry. Credentials go
         straight to the secrets vault and are never shown again. Activation requires a different user than the
@@ -128,7 +128,7 @@ export default function ConnectorStudio() {
                 <option key={k.value} value={k.value}>{k.label}</option>
               ))}
             </select>
-            <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+            <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
               {KIND_OPTIONS.find((k) => k.value === kind)?.help}
             </p>
           </div>
@@ -148,7 +148,7 @@ export default function ConnectorStudio() {
               style={{ width: "100%" }}
             />
             {isDataTable && (
-              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                 For a local file, place it in this platform's own <code className="mono">data/</code> folder first,
                 then enter just its filename here (e.g. <code className="mono">03_renewable_generation.csv</code>) —
                 not your computer's path to that folder, which the platform's containers can't resolve.
@@ -164,7 +164,7 @@ export default function ConnectorStudio() {
                 placeholder="renewable_generation"
                 style={{ width: "100%" }}
               />
-              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                 Reference tables available on source-db: customer_demographics, customer_energy_consumption_tariff,
                 renewable_generation, grid, market, external_weather.
               </p>
@@ -190,13 +190,13 @@ export default function ConnectorStudio() {
                 <td className="mono" style={{ whiteSpace: "nowrap" }}>
                   {c.endpoint_url}
                   {c.kind === "database" && c.schema_mapping?.table_name && (
-                    <div className="muted" style={{ fontSize: 11 }}>table: {c.schema_mapping.table_name}</div>
+                    <div className="muted" style={{ fontSize: 12 }}>table: {c.schema_mapping.table_name}</div>
                   )}
                 </td>
                 <td><Badge text={c.status} /></td>
                 <td className="muted">{c.credential_masked ? JSON.stringify(c.credential_masked) : "none"}</td>
                 <td>{c.last_test_result ? (c.last_test_result.http_status ?? (c.last_test_result.ssrf_allowed ? "reachable?" : "blocked")) : "—"}</td>
-                <td className="muted" style={{ fontSize: 12 }} title={c.last_auto_ingest?.error}>
+                <td className="muted" style={{ fontSize: 13 }} title={c.last_auto_ingest?.error}>
                   {c.last_auto_ingest
                     ? `${c.last_auto_ingest.outcome === "ingested" ? `${c.last_auto_ingest.rows} new rows` : c.last_auto_ingest.outcome === "no_new_data" ? "monitoring · no new data" : c.last_auto_ingest.outcome} · ${new Date(c.last_auto_ingest.polled_at).toLocaleTimeString()}`
                     : "—"}
@@ -222,9 +222,9 @@ export default function ConnectorStudio() {
         </div>
       )}
       {data && !data.some((c) => c.status === "active" && DATA_INGESTION_KINDS.includes(c.kind)) && (
-        <p className="muted" style={{ fontSize: 11, marginTop: 10 }}>
+        <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
           No active database or data_table connector yet — Portfolio Operations' Start Optimizer needs one of those
-          two kinds active before it can begin (a Document Intake upload alone no longer unlocks it).
+          two kinds active before it can begin.
         </p>
       )}
     </div>

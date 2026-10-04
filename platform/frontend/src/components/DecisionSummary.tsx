@@ -29,11 +29,11 @@ export default function DecisionSummary() {
           <h3 style={{ margin: 0 }}>Recent Decisions</h3>
           <div className="row" style={{ gap: 10 }}>
             {dataUpdatedAt > 0 && (
-              <span className="muted" style={{ fontSize: 11 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
                 updated {new Date(dataUpdatedAt).toLocaleTimeString()} · refreshes every 5 min
               </span>
             )}
-            <Link to="/decisions" style={{ fontSize: 12 }}>View all →</Link>
+            <Link to="/decisions" style={{ fontSize: 13 }}>View all →</Link>
           </div>
         </div>
 

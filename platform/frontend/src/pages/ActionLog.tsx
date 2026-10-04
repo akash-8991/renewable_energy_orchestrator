@@ -50,8 +50,8 @@ export default function ActionLog() {
 
   return (
     <div>
-      <div className="row-between" style={{ marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
-        <h2 style={{ fontSize: 15, margin: 0 }}>Action Tickets</h2>
+      <div className="page-header">
+        <h2 className="page-title flush">Action Tickets</h2>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             <option value="">all types</option>
@@ -80,7 +80,7 @@ export default function ActionLog() {
           </button>
         </div>
       </div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+      <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
         Every governed action any decision cycle has ever proposed, as one ticket each — battery charge/discharge,
         grid buy/sell, curtailment, demand response — with its resolved disposition. For a full Excel evidence pack
         (including reasoning, approvals and OT acknowledgements), use Audit &amp; Exports.
@@ -100,14 +100,14 @@ export default function ActionLog() {
           <tbody>
             {data.map((t) => (
               <tr key={t.id}>
-                <td className="mono" style={{ fontSize: 11 }}>{new Date(t.start_time).toLocaleString()}</td>
+                <td className="mono" style={{ fontSize: 12 }}>{new Date(t.start_time).toLocaleString()}</td>
                 <td>{t.action_type}</td>
                 <td>{t.asset_name || t.asset_id || "—"}</td>
                 <td>{t.quantity.toFixed(0)} {t.unit}</td>
                 <td><Badge text={t.risk_level} /></td>
                 <td><Badge text={t.ticket_status} /></td>
-                <td className="mono muted" style={{ fontSize: 11 }}>{t.decision_cycle_id}</td>
-                <td className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{t.reason || ""}</td>
+                <td className="mono muted" style={{ fontSize: 12 }}>{t.decision_cycle_id}</td>
+                <td className="muted" style={{ fontSize: 13, whiteSpace: "nowrap" }}>{t.reason || ""}</td>
               </tr>
             ))}
           </tbody>

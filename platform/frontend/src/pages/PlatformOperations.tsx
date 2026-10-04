@@ -25,7 +25,8 @@ export default function PlatformOperations() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Platform Operations</h2>
+      <h2 className="page-title">Platform Operations</h2>
+      <p className="page-intro">Live health of the platform's services.</p>
       <div className="grid grid-cards">
         <div className="card">
           <h3>API</h3>
@@ -50,12 +51,11 @@ export default function PlatformOperations() {
 
       <div className="card" style={{ marginTop: 16 }}>
         <h3>Service topology</h3>
-        <p className="muted" style={{ fontSize: 13 }}>
-          api (this dashboard's backend) · optimizer-worker (10-min decision cycle, MILP solve) · agent-worker (9-agent
-          LLM evidence pass) · ot-gateway-sim (independent OT command validation, network-isolated) · edge-simulator
-          (synthetic telemetry) · export-worker (governed Excel generation). Background workers have no HTTP surface
-          by design — their liveness shows up as fresh Decisions/Signals appearing on this page and in the Decision
-          Centre, not as a health endpoint here.
+        <p className="card-help" style={{ marginBottom: 0 }}>
+          api (this dashboard's backend) · optimizer-worker (decision cycles, MILP solve) · agent-worker (LLM evidence
+          pass) · ot-gateway-sim (independent OT command validation) · edge-simulator (synthetic telemetry) ·
+          export-worker (governed Excel generation). Background workers report liveness through heartbeats; their
+          output shows up on this page and in the Decision Centre as fresh Decisions and Signals.
         </p>
       </div>
     </div>

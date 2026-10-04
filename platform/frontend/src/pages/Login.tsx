@@ -71,9 +71,8 @@ export default function Login() {
           >
             Log in with SSO
           </button>
-          <p className="muted" style={{ fontSize: 11, marginTop: 16 }}>
-            Demo credentials pre-filled. See <code className="mono">docs/DEPLOYMENT.md</code> (§ A7) for the
-            full table of seeded users/roles.
+          <p className="muted" style={{ fontSize: 13, marginTop: 16, marginBottom: 0 }}>
+            Demo credentials are pre-filled for this evaluation environment.
           </p>
         </form>
       </div>

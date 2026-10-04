@@ -17,8 +17,8 @@ export default function LiveSignalMonitor() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Live Signal Monitor</h2>
-      <p className="muted">Every OT command signal from prepared through acknowledged/rejected/rolled-back.</p>
+      <h2 className="page-title">Live Signal Monitor</h2>
+      <p className="page-intro">Every OT command signal from prepared through acknowledged/rejected/rolled-back.</p>
       {isLoading && <div className="empty-state">Loading...</div>}
       {data && data.length === 0 && <div className="empty-state">No signals yet — enable APPROVAL_REQUIRED or AUTONOMOUS_BOUNDED mode in Policy Studio to see dispatchable actions.</div>}
       {data && data.length > 0 && (
@@ -35,7 +35,7 @@ export default function LiveSignalMonitor() {
                 <td>{s.command_type}</td>
                 <td>{s.setpoint_value} {s.unit}</td>
                 <td><Badge text={s.state} /></td>
-                <td className="muted" style={{ fontSize: 11 }}>
+                <td className="muted" style={{ fontSize: 12 }}>
                   {s.state_history.map((h) => h.state).join(" → ")}
                 </td>
               </tr>

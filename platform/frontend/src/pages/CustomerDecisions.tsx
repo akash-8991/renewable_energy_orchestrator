@@ -61,7 +61,7 @@ function GovernedAssetsTab() {
 
   return (
     <div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+      <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
         Pick one of the utility's own demand-side assets (industrial/commercial load sites) to see every
         governed decision that has affected it — curtailment, demand response, or a hold — with the
         operator-facing explanation for why.
@@ -142,7 +142,7 @@ interface CustomerInsights {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
     </div>
   );
@@ -179,7 +179,7 @@ function CustomerInsightsTab() {
 
   return (
     <div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+      <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
         Retail and individual customer accounts (residential, SME, industrial) ingested from the reference
         dataset — filter by customer type, region, or customer ID, then pick one for their consumption,
         renewable generation and cost trend.
@@ -268,13 +268,13 @@ function CustomerInsightsTab() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e1e5ec" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#667085" }} minTickGap={40} />
-                  <YAxis tick={{ fontSize: 11, fill: "#667085" }} width={50} label={{ value: "kWh", angle: -90, position: "insideLeft", fontSize: 11, fill: "#667085" }} />
+                  <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#475467" }} minTickGap={40} />
+                  <YAxis tick={{ fontSize: 12, fill: "#475467" }} width={50} label={{ value: "kWh", angle: -90, position: "insideLeft", fontSize: 12, fill: "#475467" }} />
                   <Tooltip
-                    contentStyle={{ background: "#fff", border: "1px solid #e1e5ec", borderRadius: 8, fontSize: 12 }}
+                    contentStyle={{ background: "#fff", border: "1px solid #e1e5ec", borderRadius: 8, fontSize: 13 }}
                     formatter={(value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " kWh"}
                   />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Legend wrapperStyle={{ fontSize: 13 }} />
                   <Area type="monotone" dataKey="consumption_kwh" name="Consumption" stroke="#2563eb" fill="url(#custConsumption)" strokeWidth={2} />
                   <Area
                     type="monotone"
@@ -299,7 +299,8 @@ export default function CustomerDecisions() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Customers</h2>
+      <h2 className="page-title">Customers</h2>
+      <p className="page-intro">Customer-level insight, and the decisions governing each demand-side asset.</p>
       <div className="tabs">
         <div className={"tab" + (tab === "insights" ? " active" : "")} onClick={() => setTab("insights")}>Customer Insights</div>
         <div className={"tab" + (tab === "assets" ? " active" : "")} onClick={() => setTab("assets")}>Governed Assets</div>

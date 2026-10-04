@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useState } from "react";
 import { api } from "../api/client";
 import Badge from "../components/Badge";
-import PortfolioRegistry from "../components/PortfolioRegistry";
+import PortfolioRegistry, { PortfolioAssetsTable } from "../components/PortfolioRegistry";
 
 interface UserRow { id: string; email: string; display_name: string; roles: string[]; is_active: boolean }
 interface TenantRow { id: string; slug: string; name: string; deployment_mode: string; created_at: string }
@@ -49,24 +49,30 @@ export default function TenantAdministration() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Tenant Administration</h2>
+      <h2 className="page-title">Tenant Administration</h2>
+      <p className="page-intro">Manage this tenant's users and register the sites and assets it operates.</p>
       {error && <div className="error-banner">{error}</div>}
 
-      <form onSubmit={onSubmit} className="card" style={{ maxWidth: 480, marginBottom: 20 }}>
-        <h3>Add user</h3>
-        <div className="field"><label>Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} required style={{ width: "100%" }} /></div>
-        <div className="field"><label>Display name</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required style={{ width: "100%" }} /></div>
-        <div className="field"><label>Password (min. 10 characters)</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} style={{ width: "100%" }} /></div>
-        <div className="field">
-          <label>Role</label>
-          <select value={role} onChange={(e) => setRole(e.target.value)} style={{ width: "100%" }}>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
-        <button type="submit" disabled={createUser.isPending}>Create user</button>
-      </form>
+      <div className="card-grid uniform short">
+        <form onSubmit={onSubmit} className="card">
+          <h3>Add user</h3>
+          <div className="card-body">
+            <div className="field"><label>Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
+            <div className="field"><label>Display name</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required /></div>
+            <div className="field"><label>Password (min. 10 characters)</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} /></div>
+            <div className="field">
+              <label>Role</label>
+              <select value={role} onChange={(e) => setRole(e.target.value)}>
+                {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="card-footer"><button type="submit" disabled={createUser.isPending}>Create user</button></div>
+        </form>
+        <PortfolioRegistry />
+      </div>
 
-      <h3 style={{ fontSize: 13, textTransform: "uppercase", color: "var(--text-dim)" }}>Users in this tenant</h3>
+      <h3 className="section-title">Users in this tenant</h3>
       <div className="table-scroll">
       <table>
         <thead><tr><th>Email</th><th>Name</th><th>Roles</th><th>Active</th><th></th></tr></thead>
@@ -92,13 +98,11 @@ export default function TenantAdministration() {
       </table>
       </div>
 
-      <PortfolioRegistry />
+      <PortfolioAssetsTable />
 
       {tenants && (
         <>
-          <h3 style={{ fontSize: 13, textTransform: "uppercase", color: "var(--text-dim)", marginTop: 24 }}>
-            All platform tenants (platform_admin only)
-          </h3>
+          <h3 className="section-title">All platform tenants (platform admin only)</h3>
           <div className="table-scroll">
           <table>
             <thead><tr><th>Slug</th><th>Name</th><th>Mode</th><th>Created</th></tr></thead>

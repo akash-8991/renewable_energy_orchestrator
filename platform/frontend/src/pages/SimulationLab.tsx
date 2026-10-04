@@ -36,40 +36,40 @@ export default function SimulationLab() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 15 }}>Simulation Lab</h2>
-      <p className="muted">
-        Drives the edge-simulator's live shock scenarios (doc 08 §4 demo steps 2-6) — changes apply within one
-        simulator tick (~10s), no restart needed.
+      <h2 className="page-title">Simulation Lab</h2>
+      <p className="page-intro">
+        Inject live shock scenarios into the simulated portfolio. Changes apply within one simulator tick
+        (about 10 seconds); no restart needed.
       </p>
 
-      <div className="card" style={{ maxWidth: 520 }}>
-        <div className="field">
-          <label>Cloud cover ({(local.cloud_cover * 100).toFixed(0)}% solar loss)</label>
-          <input type="range" min={0} max={1} step={0.05} value={local.cloud_cover} onChange={(e) => setLocal({ ...local, cloud_cover: +e.target.value })} style={{ width: "100%" }} />
-        </div>
-        <div className="field">
-          <label>Wind surge (×{local.wind_surge.toFixed(1)} speed)</label>
-          <input type="range" min={0} max={3} step={0.1} value={local.wind_surge} onChange={(e) => setLocal({ ...local, wind_surge: +e.target.value })} style={{ width: "100%" }} />
-        </div>
-        <div className="field">
-          <label>Price spike (×{local.price_spike.toFixed(1)})</label>
-          <input type="range" min={0} max={5} step={0.1} value={local.price_spike} onChange={(e) => setLocal({ ...local, price_spike: +e.target.value })} style={{ width: "100%" }} />
-        </div>
-        <div className="field">
-          <label>Demand shock (×{local.demand_shock.toFixed(1)})</label>
-          <input type="range" min={0} max={5} step={0.1} value={local.demand_shock} onChange={(e) => setLocal({ ...local, demand_shock: +e.target.value })} style={{ width: "100%" }} />
-        </div>
-        <div className="field">
-          <label>Battery outage — asset ID (blank = none)</label>
-          <input value={local.battery_outage_asset} onChange={(e) => setLocal({ ...local, battery_outage_asset: e.target.value })} style={{ width: "100%" }} />
-        </div>
-        <div className="field row">
-          <input type="checkbox" checked={local.line_congestion} onChange={(e) => setLocal({ ...local, line_congestion: e.target.checked })} id="congestion" />
-          <label htmlFor="congestion" style={{ margin: 0 }}>Line congestion (clamps grid export to 30%)</label>
-        </div>
-        <div className="row">
-          <button onClick={() => apply.mutate(local)} disabled={apply.isPending}>Apply scenario</button>
-          <button className="secondary" onClick={() => reset.mutate()} disabled={reset.isPending}>Reset to baseline</button>
+      <div className="card-grid uniform short">
+        <div className="card">
+          <h3>Shock scenario</h3>
+          <div className="card-body">
+            {([
+              ["cloud_cover", "Cloud cover (solar loss)", 0, 1, 0.05, (v: number) => `${(v * 100).toFixed(0)}%`],
+              ["wind_surge", "Wind surge (speed multiplier)", 0, 3, 0.1, (v: number) => `×${v.toFixed(1)}`],
+              ["price_spike", "Price spike (multiplier)", 0, 5, 0.1, (v: number) => `×${v.toFixed(1)}`],
+              ["demand_shock", "Demand shock (multiplier)", 0, 5, 0.1, (v: number) => `×${v.toFixed(1)}`],
+            ] as const).map(([key, label, min, max, step, fmt]) => (
+              <div className="field slider" key={key}>
+                <div className="slider-label"><span>{label}</span><b>{fmt(local[key])}</b></div>
+                <input type="range" min={min} max={max} step={step} value={local[key]} onChange={(e) => setLocal({ ...local, [key]: +e.target.value })} />
+              </div>
+            ))}
+            <div className="field">
+              <label>Battery outage — asset ID (blank = none)</label>
+              <input value={local.battery_outage_asset} onChange={(e) => setLocal({ ...local, battery_outage_asset: e.target.value })} />
+            </div>
+            <label className="check">
+              <input type="checkbox" checked={local.line_congestion} onChange={(e) => setLocal({ ...local, line_congestion: e.target.checked })} />
+              Line congestion (clamps grid export to 30%)
+            </label>
+          </div>
+          <div className="card-footer">
+            <button onClick={() => apply.mutate(local)} disabled={apply.isPending}>Apply scenario</button>
+            <button className="secondary" onClick={() => reset.mutate()} disabled={reset.isPending}>Reset to baseline</button>
+          </div>
         </div>
       </div>
     </div>

@@ -4,8 +4,8 @@
   --bg-panel-2: #eef1f6;
   --bg-code: #f1f4f9;
   --border: #e1e5ec;
-  --text: #1c2433;
-  --text-dim: #667085;
+  --text: #101828;
+  --text-dim: #475467;
   --accent: #2563eb;
   --accent-dim: #e8eefd;
   --accent-text: #1d4ed8;
@@ -16,7 +16,12 @@
   --radius: 10px;
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
   --shadow-md: 0 2px 8px rgba(16, 24, 40, 0.06);
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Inter (bundled, no external font request) at a slightly larger base size: a typeface designed for
+     UI text, with open letterforms that stay legible at the small sizes tables and labels use. */
+  --font: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --card-pad: 20px;
+  --gap: 16px;
 }
 
 * { box-sizing: border-box; }
@@ -26,9 +31,16 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+h1, h2, h3 { line-height: 1.3; letter-spacing: -0.01em; }
+p { margin: 0 0 12px; }
 
 a { color: var(--accent); text-decoration: none; }
 
@@ -47,17 +59,17 @@ a { color: var(--accent); text-decoration: none; }
 
 .sidebar-brand {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 16px;
   padding: 8px 10px 16px;
   color: var(--text);
 }
-.sidebar-brand small { display: block; color: var(--text-dim); font-weight: 400; font-size: 11px; }
+.sidebar-brand small { display: block; color: var(--text-dim); font-weight: 400; font-size: 12px; }
 
 .nav-link {
   padding: 9px 10px;
   border-radius: 8px;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
@@ -83,7 +95,9 @@ a { color: var(--accent); text-decoration: none; }
   gap: 10px;
 }
 
-.topbar h1 { font-size: 16px; margin: 0; font-weight: 600; }
+.topbar h1 { font-size: 17px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar .row { flex-wrap: nowrap; min-width: 0; }
+.topbar > .muted { font-size: 14px; white-space: nowrap; flex-shrink: 0; }
 
 .menu-toggle {
   display: none;
@@ -99,7 +113,7 @@ a { color: var(--accent); text-decoration: none; }
 
 .sidebar-overlay { display: none; }
 
-.content { padding: 20px; overflow-y: auto; overflow-x: auto; flex: 1; }
+.content { padding: 24px; overflow-y: auto; overflow-x: auto; flex: 1; }
 
 /* ---------------------------------------------------------------------
    Mobile / narrow-viewport layout. Below this width the 230px fixed
@@ -132,21 +146,56 @@ a { color: var(--accent); text-decoration: none; }
 
   .topbar { padding: 0 14px; }
   .topbar h1 { font-size: 14px; }
+  .topbar > .muted { font-size: 12px; }
   .content { padding: 12px; }
 }
 
-.grid { display: grid; gap: 14px; }
+.grid { display: grid; gap: var(--gap); }
 .grid-cards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 
+/* ---- Page structure: every page opens with the same title + intro, and lays its
+   cards out in the same grid with the same spacing. ---- */
+.page-title { font-size: 20px; font-weight: 700; margin: 0 0 6px; color: var(--text); }
+.page-title.flush { margin: 0; }
+.page-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.page-intro { color: var(--text-dim); font-size: 14px; max-width: 760px; margin: 0 0 20px; }
+.section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin: 28px 0 10px; }
+
+/* ---- Cards: one look everywhere (padding, border, title, help text, footer). ---- */
 .card {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: var(--card-pad);
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
-.card h3 { margin: 0 0 8px; font-size: 13px; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
-.card .big { font-size: 24px; font-weight: 700; }
+.card h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: var(--text); }
+.card .big { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.card-help { font-size: 13px; color: var(--text-dim); margin: 0 0 14px; line-height: 1.5; }
+.card-footer { margin-top: auto; padding-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* KPI tiles keep a small label above a big number. */
+.grid-cards .card h3 { font-size: 13px; font-weight: 500; color: var(--text-dim); margin-bottom: 6px; }
+
+/* A grid of cards that are all the same width, and — per row — the same height. */
+.card-grid { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); align-items: stretch; margin-bottom: var(--gap); }
+.card-grid > .card { display: flex; flex-direction: column; }
+/* Exactly the same size, every card: two equal columns (one on narrow screens) and a fixed row
+   height. Content that doesn't fit scrolls inside its card (.card-body), the title and footer stay put. */
+.card-grid.uniform { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 480px; }
+.card-grid.uniform.short { grid-auto-rows: 460px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.card-grid.uniform > .card { height: 100%; overflow: hidden; }
+.card-body { flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; }
+@media (max-width: 860px) { .card-grid.uniform:not(.short) { grid-template-columns: minmax(0, 1fr); } }
+/* On a phone the cards stack and size to their content (a fixed height would just mean a scroll-in-a-scroll). */
+@media (max-width: 640px) {
+  .card-grid.uniform, .card-grid.uniform.short { grid-template-columns: minmax(0, 1fr); grid-auto-rows: auto; }
+  .card-grid.uniform > .card { height: auto; overflow: visible; }
+  .card-body { overflow: visible; }
+  .card-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--text); margin: 0; cursor: pointer; }
 
 /* Every table on the platform is wrapped in a .table-scroll div (see
    components/TableScroll.tsx) so a table with more columns than the
@@ -155,12 +204,14 @@ a { color: var(--accent); text-decoration: none; }
    min-width keeps columns from ever compressing below a readable size,
    which is what makes that horizontal scroll actually kick in. */
 .table-scroll { overflow-x: auto; border-radius: var(--radius); }
-table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; color: var(--text-dim); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 11px; letter-spacing: 0.03em; white-space: nowrap; }
-td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 14px; }
+table.compact { min-width: 0; font-size: 13px; }
+table.compact th, table.compact td { padding: 7px 8px; }
+th { text-align: left; color: var(--text-dim); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 12px; letter-spacing: 0.04em; white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
 tr:hover td { background: var(--bg-panel-2); }
 
-.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1.5; }
 .badge-green { background: #dcfce7; color: #15803d; }
 .badge-amber { background: #fef3c7; color: #b45309; }
 .badge-red { background: #fee2e2; color: #b91c1c; }
@@ -172,41 +223,60 @@ button, .btn {
   background: var(--accent);
   color: #fff;
   border: 1px solid transparent;
-  padding: 7px 14px;
-  border-radius: 7px;
-  font-size: 13px;
+  padding: 0 16px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: var(--font);
   cursor: pointer;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 button:hover { filter: brightness(1.08); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button.secondary { background: var(--bg-panel); border: 1px solid var(--border); color: var(--text); }
 button.secondary:hover { background: var(--bg-panel-2); filter: none; }
 button.danger { background: var(--red); }
-button.ghost { background: transparent; color: var(--text-dim); padding: 4px 8px; }
+button.ghost { background: transparent; color: var(--text-dim); padding: 0 10px; min-height: 30px; }
 button.ghost:hover { background: var(--bg-panel-2); filter: none; }
 
 input, select, textarea {
   background: var(--bg-panel);
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 7px 10px;
-  border-radius: 7px;
-  font-size: 13px;
+  padding: 0 12px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 14px;
   font-family: var(--font);
 }
+textarea { padding: 8px 12px; }
+input[type="range"] { padding: 0; min-height: 0; accent-color: var(--accent); }
+input[type="checkbox"] { min-height: 0; width: 16px; height: 16px; accent-color: var(--accent); }
+/* inside a card, form controls fill their field unless a row sets an explicit width */
+.card .field > input:not([type="checkbox"]):not([style*="width"]), .card .field > select:not([style*="width"]) { width: 100%; }
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-dim);
 }
-label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 4px; }
-.field { margin-bottom: 12px; }
+label { font-size: 13px; font-weight: 500; color: var(--text-dim); display: block; margin-bottom: 5px; }
+.field { margin-bottom: 14px; }
+.field.slider { margin-bottom: 8px; }
+.slider-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px; }
+.slider-label { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; font-weight: 500; color: var(--text-dim); margin-bottom: 0; }
+.slider-label b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.field-hint { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.field-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.field-row > .field { flex: 1 1 100px; min-width: 0; }
 
-.row { display: flex; gap: 10px; align-items: center; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .row-between { display: flex; justify-content: space-between; align-items: center; }
 .muted { color: var(--text-dim); }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.mono { font-family: var(--font-mono); font-size: 12.5px; }
 
 .login-screen { min-height: 100vh; display: flex; }
 
@@ -243,7 +313,7 @@ label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 
 .login-brand h1 { position: relative; font-size: 28px; line-height: 1.25; margin: 0 0 14px; font-weight: 700; letter-spacing: -0.01em; }
 .login-brand p { position: relative; font-size: 15px; color: rgba(255, 255, 255, 0.8); max-width: 380px; line-height: 1.6; margin: 0 0 32px; }
 .login-brand-features { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
-.login-brand-features li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: rgba(255, 255, 255, 0.88); }
+.login-brand-features li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: rgba(255, 255, 255, 0.88); }
 .login-brand-features li::before { content: "✓"; flex-shrink: 0; font-weight: 700; color: #fff; }
 
 .login-panel {
@@ -273,13 +343,13 @@ label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 
 }
 
 .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
-.tab { padding: 8px 14px; cursor: pointer; color: var(--text-dim); border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; }
+.tab { padding: 8px 14px; cursor: pointer; color: var(--text-dim); border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--accent-text); border-bottom-color: var(--accent); }
 
 .evidence-box { background: var(--bg-code); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
-.evidence-box .finding { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.evidence-box .finding { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .evidence-box .finding:last-child { border-bottom: none; }
 
-.error-banner { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 13px; }
+.error-banner { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 14px; }
 .empty-state { color: var(--text-dim); padding: 40px; text-align: center; }

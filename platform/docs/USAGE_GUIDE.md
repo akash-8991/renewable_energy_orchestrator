@@ -475,7 +475,7 @@ data you've ingested. **Policy Studio → Forecast criteria** shows, per asset, 
 trained, how much history it used, and its error on held-out hours **versus the physics baseline**.
 Then you decide:
 
-- **Accept proposed criteria** — adopts the platform's proposal: use the ML model only where it beats
+- **Accept proposed** — adopts the platform's proposal: use the ML model only where it beats
   the baseline by at least 5%, 1.0× uncertainty band, retrain daily, ≥ 1 week of history.
 - **Set criteria…** — your own: *Forecast model* (`physics` / `auto` / `ml`), *Uncertainty band ×*
   (wider = more conservative plan), *Min history*, *Min improvement*, *Retrain every*.
@@ -659,13 +659,14 @@ shows who last saved it and when, right below the button.
 
 ### Set the autonomy mode, or hit the emergency stop
 
-**Policy Studio** (sidebar) → "Current portfolio-wide policy" shows the active mode and safety-case
-reference (if any). Under "Set new policy," pick a new mode from the dropdown — choosing
-**AUTONOMOUS_BOUNDED** reveals a required safety-case-reference field, matching the API's own
-validation in §15 — then click **Apply**. Further down, the "Emergency stop" card's single button
-toggles e-stop on/off immediately, regardless of the current autonomy mode. The same page's
-"Optimality criteria (objective policy)" card lets you adjust the cost/imbalance/degradation/
-carbon/curtailment/reliability weights and click **Apply (creates a new version)**. The **Forecast criteria** card (§13b) is where you accept or set how forecasts are produced.
+**Policy Studio** (sidebar) is five equally sized cards. **Current portfolio-wide policy** shows the
+active mode, what it means, and the safety-case reference (if any). In **Set new policy**, pick a mode
+from the dropdown — choosing **AUTONOMOUS_BOUNDED** reveals a max-risk ceiling and a required
+safety-case reference, matching the API's own validation in §15 — then click **Apply**. **Optimality
+criteria** adjusts the cost/degradation/carbon/curtailment/reliability weights, carbon price and risk
+aversion; **Apply (creates a new version)** saves them. **Forecast criteria** (§13b) is where you accept
+or set how forecasts are produced. **Emergency stop** has a single button that toggles e-stop on/off
+immediately, regardless of the current autonomy mode.
 
 ### Export audit evidence
 

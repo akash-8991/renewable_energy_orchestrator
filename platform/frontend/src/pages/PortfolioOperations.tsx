@@ -89,7 +89,7 @@ export default function PortfolioOperations() {
               <Badge text={ops?.operating_state || "idle"} />
               <strong style={{ fontSize: 14 }}>{running ? "Optimizer running" : "Optimizer idle"}</strong>
             </div>
-            <p className="muted" style={{ fontSize: 12, margin: "4px 0 0" }}>
+            <p className="muted" style={{ fontSize: 13, margin: "4px 0 0" }}>
               {running
                 ? "The decision cycle is live — cards, trend and recent decisions below reflect real analysis."
                 : opsLoading
@@ -156,7 +156,7 @@ export default function PortfolioOperations() {
 
               {(portfolios || []).map((p) => (
                 <div key={p.id} style={{ marginBottom: 24 }}>
-                  <h2 style={{ fontSize: 15 }}>{p.name}</h2>
+                  <h2 className="page-title">{p.name}</h2>
                   {p.sites.map((site) => (
                     <div key={site.id} style={{ marginBottom: 16 }}>
                       <div className="muted" style={{ marginBottom: 8, fontSize: 13 }}>{site.name}</div>
@@ -173,14 +173,14 @@ export default function PortfolioOperations() {
                                 {power && <Badge text={power.freshness} />}
                               </div>
                               <div className="big">{power ? `${fmt(power.value)} kW` : "no data"}</div>
-                              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                              <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
                                 rated {fmt(a.rated_capacity_kw)} kW
                                 {battery && ` · SoC ${fmt(battery.soc_pct)}% (${battery.soc_min_pct}-${battery.soc_max_pct}%) · SoH ${fmt(battery.soh_pct)}%`}
                               </div>
                               {Object.entries(a.latest)
                                 .filter(([k]) => k !== "power_kw")
                                 .map(([k, v]) => (
-                                  <div key={k} className="muted" style={{ fontSize: 11 }}>
+                                  <div key={k} className="muted" style={{ fontSize: 12 }}>
                                     {k}: {fmt(v.value, 2)} {v.unit}
                                   </div>
                                 ))}
