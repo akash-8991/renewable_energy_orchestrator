@@ -344,17 +344,58 @@ docker compose down          # stop everything, keep the database volume
 docker compose down -v       # stop everything AND delete all data (fresh slate next time)
 ```
 
+`down -v` removes the Postgres, object-store and source-db volumes, so the next `docker compose up -d`
+starts with a completely **empty** database — no tenant and no users, which means nobody can log in
+yet. Re-run the seed (A6) once the API is healthy to get back to the reference state:
+
+```bash
+docker compose up -d
+docker compose run --rm api python /app/platform/database/seed.py
+```
+
+### Port conflicts
+
+The stack publishes these host ports: `5173` (dashboard), `8000` (API), `8081` (Keycloak), `5433`
+(Postgres), `5434` (source-db), `6380` (Redis), `9000`/`9001` (object store), `8010` (OT gateway sim).
+If another project already uses one, compose fails with `Bind for 127.0.0.1:<port> failed` /
+`address already in use`. Find the owner with `lsof -nP -iTCP:<port> -sTCP:LISTEN`, and rather than
+killing it, remap the platform's side with an override file outside the repo (`!override` replaces
+the base `ports:` list instead of appending to it):
+
+```yaml
+# /tmp/reo-ports.yml  — example: Postgres on 5436, dashboard on 5174
+services:
+  postgres:
+    ports: !override
+      - "127.0.0.1:5436:5432"
+  web:
+    ports: !override
+      - "127.0.0.1:5174:5173"
+  api:
+    environment:
+      FRONTEND_BASE_URL: http://localhost:5174   # SSO bounces back through the API to this URL
+```
+
+```bash
+docker compose -p reo -f docker-compose.yml -f /tmp/reo-ports.yml up -d
+```
+
+Pick a port that is genuinely free (`5434` is already used by `source-db`). Only the *host* side
+changes: containers keep talking to each other as `postgres:5432` etc., and the API's CORS policy is
+open for local dev, so a different dashboard port needs no other change. Use the same `-f` pair for
+later `down`/`up`/`run` calls so compose doesn't try to recreate the container on the old port.
+
 ### Troubleshooting (local)
 
 | Symptom | Fix |
 |---|---|
-| `docker compose up` fails with a port-already-in-use error on 5432/6379 | You likely have a native Postgres/Redis running. This platform already maps around that (host ports `5433`/`6380`) — check nothing *else* is also on those two, or edit the `ports:` lines in `infrastructure/docker-compose.yml`. |
+| `docker compose up` fails with a port-already-in-use error on 5432/6379 | You likely have a native Postgres/Redis running. This platform already maps around that (host ports `5433`/`6380`) — check nothing *else* is also on those two, or remap with an override file (see *Port conflicts* above). Same fix for `5173` (dashboard) clashing with another dev server. |
 | `api` container keeps restarting | `docker compose logs api --tail 50` — almost always either the `migrate` service hasn't finished (check `docker compose logs migrate`) or `infrastructure/.env` has a typo. |
 | Dashboard loads but shows no data | Two possible causes: (1) Did you run step A6 (seed)? `docker compose run --rm api python /app/platform/database/seed.py` is safe to re-run — it no-ops if the tenant already exists. (2) Portfolio Operations shows an **idle** empty state by design until you connect a data source and click Start Optimizer (see A7 step 3) — this isn't a bug. |
 | Agents seem to give generic/templated answers | You're on the mock gateway — check `MODEL_PROVIDER=openrouter` and a real `OPENROUTER_API_KEY` are set in `infrastructure/.env`, then `docker compose up -d --build api agent-worker` to pick up the change. |
 | `pip install` fails on `psycopg2-binary` (Apple Silicon) | Install PostgreSQL client libs first: `brew install postgresql`, then retry. |
 | `docker compose up` fails to pull `minio/minio:latest` ("repository does not exist") | Your checkout predates the SeaweedFS switch (see A5) — `git pull` to get the current `infrastructure/docker-compose.yml`, which no longer references any MinIO image. |
-| Just did a full database wipe (`TRUNCATE ... CASCADE` or similar) and want a genuinely clean state | Reseed (`database/seed.py`) — that's it. `edge-simulator` re-checks the current tenant every ~10s tick and reloads its portfolio automatically when it changes (a fresh `Tenant` row means a new id); `api`/`optimizer-worker`/`agent-worker` already re-resolve the current tenant on every request/cycle, so nothing needs a manual restart. |
+| Just did a full database wipe (`TRUNCATE ... CASCADE`, or `docker compose down -v`) and want a genuinely clean state | Reseed (`database/seed.py`) — that's it. `edge-simulator` re-checks the current tenant every ~10s tick and reloads its portfolio automatically when it changes (a fresh `Tenant` row means a new id); `api`/`optimizer-worker`/`agent-worker` already re-resolve the current tenant on every request/cycle, so nothing needs a manual restart. |
 
 ---
 

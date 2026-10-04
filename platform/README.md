@@ -164,6 +164,11 @@ Homebrew Postgres or Redis is common on developer machines and would otherwise s
 connection on `localhost`. Containers still talk to each other as `postgres:5432` / `redis:6379`
 internally — only host-side tooling (a local `alembic`, `psql`, `redis-cli`) needs the mapped ports.
 
+If another project already holds one of the host ports (commonly `5433` Postgres or `5173` the
+dashboard — e.g. a second Vite dev server), `docker compose up` fails with "address already in use".
+Don't stop the other process: remap just the clashing port with a throwaway override file kept
+outside the repo — see "Port conflicts" in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
 ## Model provider
 
 Defaults to **OpenRouter** (https://openrouter.ai — one OpenAI-compatible endpoint in front of
