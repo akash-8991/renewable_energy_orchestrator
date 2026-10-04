@@ -69,7 +69,7 @@ def _load_tenant_assets(db) -> tuple[str, dict[str, list[Asset]], Asset | None]:
         tenant = db.execute(select(Tenant).where(Tenant.slug == settings.default_tenant_slug)).scalar_one_or_none()
         if tenant is None:
             raise RuntimeError(f"no tenant with slug={settings.default_tenant_slug!r} — run database/seed.py first")
-        assets = db.execute(select(Asset).where(Asset.tenant_id == tenant.id)).scalars().all()
+        assets = db.execute(select(Asset).where(Asset.tenant_id == tenant.id, Asset.effective_to.is_(None))).scalars().all()
     by_type: dict[str, list[Asset]] = {}
     grid = None
     for a in assets:
@@ -333,7 +333,7 @@ def normalize_table_key(name: str) -> str:
 
 
 def _by_type_and_grid(db: Session, tenant_id: str) -> tuple[dict[str, list[Asset]], Asset | None]:
-    assets = db.execute(select(Asset).where(Asset.tenant_id == tenant_id)).scalars().all()
+    assets = db.execute(select(Asset).where(Asset.tenant_id == tenant_id, Asset.effective_to.is_(None))).scalars().all()
     by_type: dict[str, list[Asset]] = {}
     grid = None
     for a in assets:

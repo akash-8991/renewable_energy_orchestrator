@@ -27,6 +27,7 @@ from context import build_evidence_bundle
 from evaluation.eval_harness import run_eval_suite
 from database.connection import SessionLocal, break_glass_cross_tenant
 from reo_common.events import CloudEvent, EventBus, STREAM_DASHBOARD_FANOUT, STREAM_DECISION_READY, STREAM_EVAL_REQUEST
+from reo_common.heartbeat import beat
 from reo_common.model_gateway import get_model_gateway
 from reo_common.platform_settings import attach_circuit_breaker
 from models.canonical import AgentEvalRun, Decision
@@ -150,6 +151,7 @@ def main() -> None:
     bus.ensure_group(STREAM_DECISION_READY, "agent-worker")
     bus.ensure_group(STREAM_EVAL_REQUEST, "agent-worker")
     while True:
+        beat("agent-worker")
         events = bus.consume(STREAM_DECISION_READY, "agent-worker", "worker-1", block_ms=3000)
         for entry_id, event in events:
             decision_id = event.data.get("decision_id")

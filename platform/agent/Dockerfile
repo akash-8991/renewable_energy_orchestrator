@@ -20,6 +20,11 @@ COPY platform/output /app/platform/output
 
 COPY platform/agent /app/platform/agent
 
+# Run as an unprivileged user: a compromised process shouldn't be root in the container.
+RUN useradd --system --uid 10001 --create-home app
+ENV HOME=/home/app
+USER app
+
 WORKDIR /app/platform/agent
 ENV PYTHONPATH=/app/platform:/app/platform/agent
 CMD ["python", "worker.py"]

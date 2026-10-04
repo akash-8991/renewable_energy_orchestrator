@@ -4,7 +4,7 @@ import secrets
 import time
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from jose import jwt as jose_jwt
 from pydantic import BaseModel
@@ -17,6 +17,7 @@ from reo_common.security import AuthContext, create_access_token, verify_passwor
 from sqlalchemy import select
 
 from ..deps import db_session, get_current_user
+from ..security_http import LoginThrottle, client_ip
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -36,10 +37,34 @@ class LoginResponse(BaseModel):
     display_name: str
 
 
+_throttle = LoginThrottle()
+
+
+def _audit_login_failure(db: Session, tenant: Tenant | None, email: str, ip: str, reason: str) -> None:
+    """Failed sign-ins land in the tenant's audit chain (bounded by the
+    throttle: at most a handful per account per window)."""
+    if tenant is None:
+        return
+    append_audit_event(
+        db, tenant_id=tenant.id, actor_id=None, actor_label=email,
+        event_type="auth.login_failed", payload={"reason": reason, "ip": ip},
+    )
+    db.commit()
+
+
 @router.post("/login", response_model=LoginResponse)
-def login(body: LoginRequest, db: Session = Depends(db_session)) -> LoginResponse:
+def login(body: LoginRequest, request: Request, db: Session = Depends(db_session)) -> LoginResponse:
+    ip = client_ip(request)
+    wait = _throttle.retry_after(body.tenant_slug, body.email, ip)
+    if wait:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS, "too many failed sign-in attempts — try again later",
+            headers={"Retry-After": str(wait)},
+        )
+
     tenant = db.execute(select(Tenant).where(Tenant.slug == body.tenant_slug)).scalar_one_or_none()
     if tenant is None:
+        _throttle.record_failure(body.tenant_slug, body.email, ip)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid tenant, email or password")
 
     token = set_current_tenant(tenant.id)
@@ -48,8 +73,11 @@ def login(body: LoginRequest, db: Session = Depends(db_session)) -> LoginRespons
             select(User).where(User.tenant_id == tenant.id, User.email == body.email, User.is_active.is_(True))
         ).scalar_one_or_none()
         if user is None or not user.hashed_password or not verify_password(body.password, user.hashed_password):
+            failures = _throttle.record_failure(body.tenant_slug, body.email, ip)
+            _audit_login_failure(db, tenant, body.email, ip, "locked_out" if failures >= settings.login_max_failures else "bad_credentials")
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid tenant, email or password")
 
+        _throttle.record_success(body.tenant_slug, body.email, ip)
         access_token = create_access_token(
             subject=user.id, tenant_id=tenant.id, roles=user.roles,
             extra={"email": user.email, "display_name": user.display_name},

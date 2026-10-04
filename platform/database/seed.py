@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "packages", "reo_common"))
 
-from reo_common.config import get_settings  # noqa: E402
+from reo_common.config import get_settings, is_local_environment  # noqa: E402
 from database.connection import SessionLocal, break_glass_cross_tenant  # noqa: E402
 from models.canonical import (  # noqa: E402
     Asset,
@@ -79,6 +79,15 @@ SITES = {
 
 
 def main() -> None:
+    if not is_local_environment(settings) and os.environ.get("ALLOW_DEMO_SEED", "").lower() != "true":
+        print(
+            f"refusing to seed demo data with ENVIRONMENT={settings.environment!r}: it creates 9 accounts that all share a "
+            "published password.\nFor a real deployment create your tenant and administrator with "
+            "database/bootstrap.py, then register your own sites and assets in Tenant Administration.\n"
+            "(Set ALLOW_DEMO_SEED=true to override for an evaluation environment.)",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     db = SessionLocal()
     try:
         with break_glass_cross_tenant():

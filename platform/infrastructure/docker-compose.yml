@@ -36,6 +36,7 @@ services:
       POSTGRES_DB: reo
     ports: ["127.0.0.1:5433:5432"]  # 5433 on the host: 5432 is often taken by a native/Homebrew postgres; containers use "postgres:5432" internally
     volumes: ["reo-postgres-data:/var/lib/postgresql/data"]
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U reo -d reo"]
       interval: 5s
@@ -44,6 +45,13 @@ services:
 
   redis:
     image: redis:7-alpine
+    # The Redis streams are the event bus (telemetry, decision hand-off). AOF
+    # persistence means an unclean restart doesn't drop unprocessed events;
+    # noeviction because evicting a stream key would silently lose events —
+    # the streams are length-capped instead (reo_common.events.STREAM_MAXLEN).
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory-policy", "noeviction"]
+    volumes: ["reo-redis-data:/data"]
+    restart: unless-stopped
     ports: ["127.0.0.1:6380:6379"]  # 6380 on the host: 6379 is often taken by a native redis; containers use "redis:6379" internally
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -65,6 +73,7 @@ services:
     volumes:
       - reo-objectstore-data:/data
       - ./seaweedfs-init/s3.json:/etc/seaweedfs/s3.json:ro
+    restart: unless-stopped
     ports:
       - "127.0.0.1:9000:8333"  # S3 API — same host port MinIO used, so S3_PUBLIC_ENDPOINT_URL below needs no change
       - "127.0.0.1:9001:8888"  # filer's own file-browser UI — not a bucket-oriented console like MinIO's, but the closest thing to one here
@@ -100,6 +109,7 @@ services:
       - reo-source-db-data:/var/lib/postgresql/data
       - ../../data:/csv:ro
       - ./source-db-init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U reo_source -d client_export"]
       interval: 5s
@@ -136,6 +146,13 @@ services:
       migrate: { condition: service_completed_successfully }
     ports: ["127.0.0.1:8000:8000"]
     volumes: ["../../data:/data:ro"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/ready"]  # 503 when the database or Redis is unreachable
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
 
   # Real external OIDC identity provider (production-readiness gap:
   # "authlib OIDC client wired but never tested against a real IdP").
@@ -151,6 +168,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm"]
+    restart: unless-stopped
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
@@ -166,6 +184,13 @@ services:
   optimizer-worker:
     build: { context: ../.., dockerfile: platform/policy/Dockerfile }
     environment: *python-env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "reo_common.heartbeat", "check", "optimizer-worker"]  # fails when the worker's main loop stops beating, so a hung worker is restarted
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -174,6 +199,13 @@ services:
   agent-worker:
     build: { context: ../.., dockerfile: platform/agent/Dockerfile }
     environment: *python-env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "reo_common.heartbeat", "check", "agent-worker"]  # fails when the worker's main loop stops beating, so a hung worker is restarted
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -182,6 +214,13 @@ services:
   ot-gateway-sim:
     build: { context: ../.., dockerfile: platform/guardrails/ot-gateway-sim/Dockerfile }
     environment: *python-env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8010/health', timeout=5).status == 200 else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -191,6 +230,13 @@ services:
   edge-simulator:
     build: { context: ../.., dockerfile: platform/infrastructure/edge-simulator/Dockerfile }
     environment: *python-env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "reo_common.heartbeat", "check", "edge-simulator"]  # fails when the worker's main loop stops beating, so a hung worker is restarted
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -200,6 +246,13 @@ services:
   export-worker:
     build: { context: ../.., dockerfile: platform/output/export-worker/Dockerfile }
     environment: *python-env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "reo_common.heartbeat", "check", "export-worker"]  # fails when the worker's main loop stops beating, so a hung worker is restarted
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -211,9 +264,11 @@ services:
     environment:
       VITE_API_BASE_URL: http://localhost:8000
     ports: ["127.0.0.1:5173:5173"]
+    restart: unless-stopped
     depends_on: [api]
 
 volumes:
+  reo-redis-data:
   reo-postgres-data:
   reo-objectstore-data:
   reo-source-db-data:

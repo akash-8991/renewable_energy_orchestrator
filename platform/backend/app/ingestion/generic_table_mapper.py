@@ -135,7 +135,7 @@ def apply_mapping(
             return {"status": "error", "message": "mapping is missing an event_time, asset_ref, or metric column"}
         event_time_col, asset_ref_col = event_time_cols[0], asset_ref_cols[0]
 
-        assets = db.execute(select(Asset).where(Asset.tenant_id == tenant_id)).scalars().all()
+        assets = db.execute(select(Asset).where(Asset.tenant_id == tenant_id, Asset.effective_to.is_(None))).scalars().all()
         asset_by_name = {a.name.strip().lower(): a for a in assets}
 
         readings = []

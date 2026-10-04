@@ -75,7 +75,7 @@ PERMISSIONS: dict[str, set[str]] = {
     Role.PORTFOLIO_MANAGER: {
         "read:dashboard", "read:decisions", "read:audit",
         "manage:objective_policy", "manage:scenarios", "read:economics", "ingest:files",
-        "manage:constraints", "manage:forecast_criteria",
+        "manage:constraints", "manage:forecast_criteria", "manage:assets",
     },
     Role.OT_ADMIN: {
         "read:dashboard", "read:decisions", "read:audit",
@@ -90,7 +90,7 @@ PERMISSIONS: dict[str, set[str]] = {
         "read:dashboard", "read:decisions", "read:audit",
         "manage:users", "manage:settings", "manage:connectors",
         "manage:policies", "activate:connector", "ingest:files",
-        "manage:forecast_criteria",
+        "manage:forecast_criteria", "manage:assets",
     },
     Role.AUDITOR_DPO: {
         "read:dashboard", "read:decisions", "read:audit",

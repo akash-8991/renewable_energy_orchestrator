@@ -4,10 +4,37 @@ from collections.abc import AsyncGenerator, Generator
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from database.connection import Session, get_db, reset_current_tenant, set_current_tenant
+from database.connection import Session, SessionLocal, get_db, reset_current_tenant, set_current_tenant
+from models.canonical import Tenant, User
 from reo_common.security import AuthContext, decode_access_token
+from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _load_active_user(user_id: str, tenant_id: str) -> dict | None:
+    """The user as the database sees them *now*, or None if they no longer
+    exist / are deactivated / their tenant is gone. A signed token only proves
+    who someone was when it was issued; this is what makes deactivating a user
+    or changing their roles take effect on the very next request instead of
+    when the token expires."""
+    db = SessionLocal()
+    token = set_current_tenant(tenant_id)
+    try:
+        if db.get(Tenant, tenant_id) is None:
+            return None
+        user = db.execute(
+            select(User).where(User.id == user_id, User.tenant_id == tenant_id, User.is_active.is_(True))
+        ).scalar_one_or_none()
+        if user is None:
+            return None
+        return {"roles": list(user.roles or []), "email": user.email, "display_name": user.display_name}
+    except Exception:
+        return None  # e.g. a malformed id in a forged-but-signed token: treat as not-a-user, never a 500
+    finally:
+        reset_current_tenant(token)
+        db.close()
 
 
 async def get_current_user(
@@ -27,12 +54,16 @@ async def get_current_user(
     except ValueError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
+    live = await run_in_threadpool(_load_active_user, payload.get("sub", ""), payload.get("tenant_id", ""))
+    if live is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "account no longer exists or has been deactivated")
+
     ctx = AuthContext(
         user_id=payload["sub"],
         tenant_id=payload["tenant_id"],
-        roles=payload.get("roles", []),
-        email=payload.get("email", ""),
-        display_name=payload.get("display_name", ""),
+        roles=live["roles"],  # current roles, not whatever the token was minted with
+        email=live["email"],
+        display_name=live["display_name"],
     )
     token = set_current_tenant(ctx.tenant_id)
     try:

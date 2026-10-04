@@ -65,6 +65,18 @@ active connector / dropped file ──(every 60 s, only if content changed)─�
                                   reo.decision.cycle ──▶ optimizer-worker: snapshot → forecast → solve → Decision
 ```
 
+### Production hardening (summary)
+
+Authentication re-reads the account on **every request** (`app/deps.py`): a signed token only proves
+who someone was, so deactivating a user, changing their roles or removing their tenant applies
+immediately. Sign-in is throttled in Redis and failures are audited; passwords have a minimum length;
+responses carry security headers; the api refuses to start outside a local environment with development
+secrets or wildcard CORS (`reo_common.config.production_config_problems`). Tenants onboard through
+`database/bootstrap.py` and the Portfolio registry rather than the demo seed, and the optimizer plans
+for **every** started tenant. Operational: `/ready`, healthchecks with worker heartbeats, restart
+policies, AOF-persisted Redis with capped streams, Timescale retention on forecasts, non-root images.
+Full list and what remains the operator's job: `docs/DEPLOYMENT.md` → *Production hardening checklist*.
+
 ### Forecasting: physics baseline + trained ML, operator-governed
 
 Each asset's forecast is a physics-based baseline (diurnal solar curve, wind power curve, daily
@@ -173,7 +185,7 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
 | Agent Observability | `GET /observability/summary`, `GET /observability/agent-calls`, `GET/POST /observability/eval-runs[/run]` |
 | Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` (Excel export includes an "Actions" sheet) |
-| Tenant Administration | `GET/POST /admin/users`, `GET/POST /admin/tenants` |
+| Tenant Administration | `GET/POST /admin/users`, `PATCH /admin/users/{id}` (deactivate/roles/password reset), `GET/POST /admin/tenants`, and the portfolio registry: `GET/POST /admin/portfolio/{sites,assets}`, `PATCH /admin/portfolio/assets/{id}` (`manage:assets`) |
 | Platform Operations | rollups over the above; no dedicated endpoint |
 | — (all pages) | `POST /auth/login`, `GET /auth/me` |
 

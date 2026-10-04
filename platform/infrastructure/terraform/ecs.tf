@@ -123,6 +123,16 @@ resource "aws_ecs_task_definition" "service" {
       { name = "MODEL_PROVIDER", value = var.model_provider },
       { name = "OPENROUTER_MODEL", value = var.openrouter_model },
       { name = "S3_REGION", value = var.aws_region },
+      # Production hardening (see docs/DEPLOYMENT.md): the api refuses to start in a
+      # non-local environment with wildcard CORS or the development secrets.
+      { name = "CORS_ALLOWED_ORIGINS", value = "https://${aws_cloudfront_distribution.frontend.domain_name}" },
+      { name = "ENABLE_API_DOCS", value = "false" },
+      { name = "TRUST_FORWARDED_FOR", value = "true" },  # the ALB is the only way in
+      # edge-simulator / ot-gateway-sim fabricate telemetry and acknowledge commands without
+      # controlling anything. They refuse to run outside local unless this is "true" — correct
+      # for an evaluation deployment; set var.simulators_enabled=false and drop both services
+      # from local.services when connecting a real site.
+      { name = "SIMULATORS_ENABLED", value = tostring(var.simulators_enabled) },
     ]
     secrets = [
       { name = "DATABASE_URL", valueFrom = aws_secretsmanager_secret.database_url.arn },

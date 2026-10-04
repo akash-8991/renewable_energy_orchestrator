@@ -20,6 +20,11 @@ COPY platform/output /app/platform/output
 
 COPY platform/infrastructure/edge-simulator /app/platform/infrastructure/edge-simulator
 
+# Run as an unprivileged user: a compromised process shouldn't be root in the container.
+RUN useradd --system --uid 10001 --create-home app
+ENV HOME=/home/app
+USER app
+
 WORKDIR /app/platform/infrastructure/edge-simulator
 ENV PYTHONPATH=/app/platform:/app/platform/infrastructure/edge-simulator
 CMD ["python", "simulator.py"]

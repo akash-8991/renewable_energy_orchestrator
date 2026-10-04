@@ -25,6 +25,7 @@ notably SCADA/OT control), that's called out explicitly rather than glossed over
 12. [Model gateway resilience (circuit breaker)](#12-model-gateway-resilience-circuit-breaker)
 13. [Real SSO / identity provider setup](#13-real-sso--identity-provider-setup)
 13b. [Forecast criteria: accept the proposal or set your own](#13b-forecast-criteria-accept-the-proposal-or-set-your-own) (also: deterministic scenarios, advisory-only maintenance)
+13c. [Registering your own portfolio, and managing users](#13c-registering-your-own-portfolio-and-managing-users)
 14. [RBAC roles reference](#14-rbac-roles-reference)
 15. [Autonomy mode & governance](#15-autonomy-mode--governance)
 16. [Exporting audit evidence](#16-exporting-audit-evidence)
@@ -495,6 +496,26 @@ the same comparison every time.
 `advisory`: battery health/warranty, an asset reporting bad data) but never schedules, approves or
 dispatches it — there is nothing to approve, and the OT gateway refuses such a command outright.
 
+## 13c. Registering your own portfolio, and managing users
+
+**Tenant Administration → Portfolio registry** is where a tenant describes what it operates — no
+seed script, no SQL. Add a **site**, then **assets** on it: `solar`, `wind`, `consumer`, `battery`
+(needs energy kWh; its power limit is the rated kW) and exactly one `grid_interconnection`. Each asset
+shows its **id** — that is the `asset_id` your telemetry files and feeds must use. **Retire** takes an
+asset out of planning (and out of the digital twin, agents and OT commands) while keeping all its
+history; **Restore** brings it back. API: `GET/POST /admin/portfolio/{sites,assets}`,
+`PATCH /admin/portfolio/assets/{id}` (`manage:assets` — tenant admin, portfolio manager).
+
+**Users** (same page): add a user (password at least 10 characters), or **Deactivate** / **Reactivate**
+one — it takes effect on their very next request. Roles and password resets are available through
+`PATCH /admin/users/{id}`. A tenant always keeps at least one active administrator, and you can't
+deactivate yourself. Repeated wrong passwords lock an account for 15 minutes (`429`), and every failed
+sign-in appears in Audit & Exports as `auth.login_failed`.
+
+**A brand-new deployment** has no users at all: create the first tenant and administrator with
+`database/bootstrap.py` (see `docs/DEPLOYMENT.md`, B10 / *Production hardening checklist*) — the demo
+seed only runs locally.
+
 ## 14. RBAC roles reference
 
 | Role | Can do |
@@ -502,10 +523,10 @@ dispatches it — there is nothing to approve, and the OT gateway refuses such a
 | `viewer` | Read dashboard, decisions, audit |
 | `operator` | + approve assigned items, acknowledge signals, bounded override, accept/set forecast criteria |
 | `senior_operator` | + four-eyes approval, pause operations, trigger e-stop, accept/set forecast criteria |
-| `portfolio_manager` | + manage objective policy/scenarios/constraints, ingest files, read economics, accept/set forecast criteria |
+| `portfolio_manager` | + manage objective policy/scenarios/constraints, ingest files, read economics, accept/set forecast criteria, register sites/assets |
 | `ot_admin` | + manage adapters/command envelopes, read control readiness |
 | `model_admin` | + manage model registry/eval, deploy models, trigger evaluation runs |
-| `tenant_admin` | + manage users, settings (Configuration Studio), connectors, policies, activate connectors |
+| `tenant_admin` | + manage users (incl. deactivate/reset), settings (Configuration Studio), connectors, policies, activate connectors, register sites/assets, accept/set forecast criteria |
 | `auditor_dpo` | + export evidence, read privacy data, manage data-subject requests |
 | `platform_admin` | **Superuser** — every permission that exists, platform-wide, including cross-tenant break-glass reads (all audited) |
 

@@ -59,7 +59,7 @@ def build_evidence_bundle(db: Session, tenant_id: str, decision: Decision) -> Ev
         forecasts.append(row)
         index[eid] = row
 
-    asset_rows = db.execute(select(Asset).where(Asset.tenant_id == tenant_id)).scalars().all()
+    asset_rows = db.execute(select(Asset).where(Asset.tenant_id == tenant_id, Asset.effective_to.is_(None))).scalars().all()
     assets = []
     for i, a in enumerate(asset_rows):
         eid = _eid("asset", i)

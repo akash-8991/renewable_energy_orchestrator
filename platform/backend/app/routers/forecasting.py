@@ -147,7 +147,7 @@ def retrain_now(
     """Retrain every asset's model from the history ingested so far (the
     optimizer also does this on its own cadence)."""
     criteria = effective_criteria(get_or_create_platform_settings(db, ctx.tenant_id).forecast_criteria)
-    assets = db.execute(select(Asset).where(Asset.tenant_id == ctx.tenant_id)).scalars().all()
+    assets = db.execute(select(Asset).where(Asset.tenant_id == ctx.tenant_id, Asset.effective_to.is_(None))).scalars().all()
     train_tenant_models(db, ctx.tenant_id, list(assets), criteria)
     append_audit_event(
         db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email, event_type="forecast.retrained",

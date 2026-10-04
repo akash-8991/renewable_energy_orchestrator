@@ -341,7 +341,7 @@ else is rejected by the same SSRF-style egress check an HTTP connector goes thro
 ```bash
 cd infrastructure
 docker compose down          # stop everything, keep the database volume
-docker compose down -v       # stop everything AND delete all data (fresh slate next time)
+docker compose down -v       # stop everything AND delete all data — database, object store, source-db and Redis volumes (fresh slate next time)
 ```
 
 `down -v` removes the Postgres, object-store and source-db volumes, so the next `docker compose up -d`
@@ -395,6 +395,10 @@ later `down`/`up`/`run` calls so compose doesn't try to recreate the container o
 | I changed my data file/table but no new decision appeared | Automatic re-ingestion runs every `CONNECTOR_POLL_SECONDS` (default 60) and only for **active** connectors; check Connector Studio's *Auto-ingest* column (`unchanged` = the content really is identical; `error` = hover for the reason). A decision is only requested while Portfolio Operations is **running**. `docker compose logs api --tail 50 \| grep connector` shows each poll. |
 | `migrate` exits with `Can't locate revision '00NN'` after pulling new code | The `migrate` service builds its own image, so a pull that adds a migration needs it rebuilt: `docker compose build migrate` (or just `docker compose up -d --build`). |
 | `migrate` exits with `connection refused` on the very first start after `down -v` | Postgres restarts once while initialising a fresh volume, and `migrate` can start in that gap. Run `docker compose up -d` again — it's harmless and idempotent. |
+| Every sign-in returns `429 too many failed sign-in attempts` | The login throttle: 5 failures per account / 30 per IP per 15 minutes. Wait for `Retry-After`, or clear it: `docker compose exec redis redis-cli --scan --pattern 'reo:login:fail:*' \| xargs -r docker compose exec -T redis redis-cli del`. |
+| The api container exits immediately with `refusing to start with insecure configuration` | `ENVIRONMENT` is not `local` and a development secret / wildcard CORS is still set. The message lists which; see the *Production hardening checklist*. For local use keep `ENVIRONMENT=local`. |
+| A user says they were signed out / get 401 after an admin changed their account | Expected: deactivating a user or removing their role applies on their next request. Reactivate them under Tenant Administration. |
+| `edge-simulator` / `ot-gateway-sim` exit with `refuses to run with ENVIRONMENT=...` | They fabricate data, so they only run locally unless `SIMULATORS_ENABLED=true`. |
 | Policy Studio's Forecast criteria show `insufficient data` for an asset | A forecast model needs at least `min_training_hours` (default 168 = one week) of ingested history for that asset. Connect a data source and let it accumulate, or ingest a historical file (e.g. `03_renewable_generation.csv`), then **Retrain now**. Until an operator accepts or sets criteria the physics baseline is used regardless. |
 | Agents seem to give generic/templated answers | You're on the mock gateway — check `MODEL_PROVIDER=openrouter` and a real `OPENROUTER_API_KEY` are set in `infrastructure/.env`, then `docker compose up -d --build api agent-worker` to pick up the change. |
 | `pip install` fails on `psycopg2-binary` (Apple Silicon) | Install PostgreSQL client libs first: `brew install postgresql`, then retry. |
@@ -635,7 +639,10 @@ it as a one-off ECS task using the `api` task definition with its command overri
    `aws logs tail /ecs/reo-api --since 5m --region eu-west-1`) — look for
    `Running upgrade ... -> 0008`, the final migration.
 
-### B10. Seed the tenant, the same way, as a one-off task
+### B10. Create your tenant and administrator (not the demo seed), as a one-off task
+
+The deployed `ENVIRONMENT` is `prod`, and `database/seed.py` **refuses to run** there: it creates nine
+accounts sharing a published password. Create your real tenant and first administrator instead:
 
 ```bash
 aws ecs run-task \
@@ -643,9 +650,15 @@ aws ecs run-task \
   --task-definition reo-api \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SG],assignPublicIp=DISABLED}" \
-  --overrides '{"containerOverrides":[{"name":"api","command":["python","/app/platform/database/seed.py"]}]}' \
+  --overrides '{"containerOverrides":[{"name":"api","command":["python","/app/platform/database/bootstrap.py","--tenant-slug","acme","--tenant-name","Acme Energy","--admin-email","you@acme.example"],"environment":[{"name":"BOOTSTRAP_ADMIN_PASSWORD","value":"<a strong password, 12+ characters>"}]}]}' \
   --region eu-west-1
 ```
+
+(For anything beyond a one-off, put the password in a Secrets Manager secret and reference it with
+`secrets` instead of an inline `environment` value, then change it at first login.) Then sign in,
+and register your sites and assets under **Tenant Administration → Portfolio registry**. If you
+only want to look around an evaluation deployment with the demo portfolio, set `ALLOW_DEMO_SEED=true`
+on the task and run `seed.py` — never do that where real people or real data are involved.
 
 ### B11. Build and deploy the frontend
 
@@ -756,6 +769,82 @@ those two resources aren't managed by this Terraform (deliberately, so state doe
 itself) — delete them manually from the console afterward if wanted.
 
 ---
+
+## Production hardening checklist
+
+What the platform enforces by itself, and what is yours to do. Everything marked **enforced** is
+covered by tests; the rest is operational.
+
+### Enforced by the platform
+
+| Control | Behaviour |
+|---|---|
+| **No development secrets outside local** | With `ENVIRONMENT` anything other than `local`/`development`/`dev`/`test`, the api **refuses to start** if `JWT_SECRET` is the development default (or under 32 characters), if `VAULT_MASTER_KEY` is the development default (when `SECRETS_PROVIDER=local`), or if `CORS_ALLOWED_ORIGINS` is `*`/empty. The error names each problem. (`ALLOW_INSECURE_DEFAULTS=true` overrides it with a loud warning — for a throwaway environment only.) Terraform sets all three. |
+| **Accounts are checked on every request** | A token is not trusted on its own: each request re-reads the user. Deactivating a user, changing their roles or deleting their tenant takes effect on their *next request*, not when the 8-hour token expires. (`PATCH /admin/users/{id}`, Tenant Administration → Deactivate.) A tenant cannot lose its last administrator, and nobody can deactivate themselves. |
+| **Login throttling** | 5 failed sign-ins per account (and 30 per client IP) per 15 minutes, then `429` with `Retry-After`. Every failed attempt is written to the tenant's audit chain (`auth.login_failed`). Settings: `LOGIN_MAX_FAILURES`, `LOGIN_IP_MAX_FAILURES`, `LOGIN_WINDOW_SECONDS`. Set `TRUST_FORWARDED_FOR=true` only behind a load balancer you control (Terraform does). |
+| **Password policy** | At least `PASSWORD_MIN_LENGTH` (10) characters for any user created or reset through the API; the bootstrap CLI requires 12. |
+| **Hardened responses** | `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, a locked-down `Content-Security-Policy`, `Cache-Control: no-store`, and `Strict-Transport-Security` outside local. Swagger/OpenAPI are off when `ENABLE_API_DOCS=false` (Terraform sets this). |
+| **No demo data in production** | `seed.py` refuses outside local (see B10); use `database/bootstrap.py`. |
+| **No synthetic telemetry in production** | `edge-simulator` and `ot-gateway-sim` refuse to start outside local unless `SIMULATORS_ENABLED=true` — they fabricate readings and acknowledge commands without controlling anything. Terraform sets it from `var.simulators_enabled` (default `true` for an evaluation deployment). **For a real site set it to `false` and remove both services** — a real OT gateway adapter is outside this repository. |
+| **Bounded growth** | Redis streams are length-capped (telemetry 500k entries, others 20k). Timescale retention: telemetry 3 years, forecasts 90 days. Scenario runs and agent call logs are pruned after `OBSERVABILITY_RETENTION_DAYS` (90). The decision ledger and the hash-chained audit log are **never** pruned (their retention is a legal question — `Tenant.retention_years`). |
+| **Bounded uploads** | Uploads are read in chunks and cut off at the limit (100 MB data files, 15 MB documents) instead of being buffered whole first. |
+| **Readiness and self-healing** | `GET /ready` checks the database and Redis (503 if either is down; `/health` is liveness only). Compose healthchecks restart a hung api or a worker whose loop stopped beating (`reo:heartbeat:*` keys); every service has `restart: unless-stopped`. Redis persists with AOF so an unclean restart doesn't drop unprocessed events. |
+| **Least privilege in containers** | All Python service images run as an unprivileged user (uid 10001), not root. |
+| **Every tenant is planned for** | The optimizer runs a cycle for **every** tenant whose optimizer is started, not just the first. |
+
+### Yours to do
+
+1. **Secrets** — generate and store: `JWT_SECRET` (`openssl rand -base64 48`), `VAULT_MASTER_KEY` (a
+   Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`)
+   or use `SECRETS_PROVIDER=aws`. Rotating `JWT_SECRET` signs everyone out (fine). Rotating
+   `VAULT_MASTER_KEY` makes already-stored connector credentials undecryptable — re-enter them in
+   Connector Studio afterwards.
+2. **Change the compose defaults** if you run compose anywhere reachable: the Postgres (`reo/reo`),
+   source-db, SeaweedFS (`reo-minio`) and Keycloak (`admin/admin`) credentials in
+   `infrastructure/docker-compose.yml` are for a laptop. The compose file is a **local/evaluation**
+   deployment (the dashboard runs the Vite dev server, Keycloak runs `start-dev`); production is the
+   Terraform stack (static frontend on CloudFront, RDS, ElastiCache, Secrets Manager, Keycloak/your IdP).
+3. **TLS** — terminate it in front of the api (ALB + ACM certificate: B13). The api sends HSTS but does
+   not serve TLS itself.
+4. **Backups** — see below. Nothing backs the database up for you.
+5. **Monitoring** — alert on `/ready` returning 503, on container restarts, on the CloudWatch log groups
+   (B14), and on `reo:heartbeat:*` keys vanishing. There is no built-in metrics endpoint.
+6. **Multi-replica api** — SSO's CSRF `state` is held in process memory, so run **one** api replica
+   until it is moved to Redis (documented in `SIMPLIFICATIONS.md`); the login throttle and heartbeats
+   already use Redis.
+7. **IdP / MFA** — local passwords are bcrypt-hashed but there is no MFA. For anything beyond a pilot,
+   federate with your IdP (Configuration Studio → Identity Provider) and enforce MFA there.
+
+### Backup and restore
+
+Docker Compose (the stack's data lives in named volumes: `reo-postgres-data`, `reo-objectstore-data`,
+`reo-source-db-data`, `reo-redis-data`):
+
+```bash
+# backup the platform database (consistent, online)
+docker compose exec -T postgres pg_dump -U reo -Fc reo > reo-$(date +%F).dump
+
+# restore into an empty database (stop writers first)
+docker compose stop api optimizer-worker agent-worker export-worker edge-simulator ot-gateway-sim
+docker compose exec -T postgres dropdb -U reo reo && docker compose exec -T postgres createdb -U reo reo
+docker compose exec -T postgres psql -U reo -d reo -c "CREATE EXTENSION IF NOT EXISTS timescaledb"
+docker compose exec -T postgres psql -U reo -d reo -c "SELECT timescaledb_pre_restore()"
+docker compose exec -T postgres pg_restore -U reo -d reo --no-owner < reo-2026-10-04.dump
+docker compose exec -T postgres psql -U reo -d reo -c "SELECT timescaledb_post_restore()"
+docker compose up -d
+```
+
+Exported evidence packs and uploaded files live in the object store (`reo-objectstore-data`); back the
+volume up with your normal volume snapshots. On AWS, RDS automated backups and S3 versioning/object
+lock (already in the Terraform) are the equivalent — set the RDS retention period to your RPO and
+**test a restore** before relying on it. After any restore, check the audit chain
+(`GET /audit/events` → `chain_valid`).
+
+### Upgrading
+
+`git pull`, then `docker compose up -d --build` — the `migrate` service runs first and applies new
+migrations before the api starts (it has its own image: always rebuild it with the rest). Roll back by
+restoring the pre-upgrade backup; migrations are forward-only in practice.
 
 ## Part C — Other clouds
 

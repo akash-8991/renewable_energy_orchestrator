@@ -23,6 +23,11 @@ COPY platform/output /app/platform/output
 
 COPY platform/backend /app/platform/backend
 
+# Run as an unprivileged user: a compromised process shouldn't be root in the container.
+RUN useradd --system --uid 10001 --create-home app
+ENV HOME=/home/app
+USER app
+
 WORKDIR /app/platform/backend
 ENV PYTHONPATH=/app/platform:/app/platform/backend
 

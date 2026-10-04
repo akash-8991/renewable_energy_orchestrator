@@ -109,6 +109,48 @@ class Settings(BaseSettings):
     environment: str = "local"
     default_tenant_slug: str = "demo-utility"
 
+    # Browser/API hardening. "*" is only acceptable for local development;
+    # any other environment must name the dashboard origin(s), comma-separated.
+    cors_allowed_origins: str = "*"
+    enable_api_docs: bool = True  # Swagger UI / OpenAPI schema; switch off in production
+    trust_forwarded_for: bool = False  # honour X-Forwarded-For for the client IP (only behind a trusted load balancer)
+
+    # Login brute-force protection (Redis-backed)
+    login_max_failures: int = 5  # per account (tenant + email)
+    login_ip_max_failures: int = 30  # per client IP
+    login_window_seconds: int = 900
+    password_min_length: int = 10
+
+    # Housekeeping
+    observability_retention_days: int = 90  # scenario runs + agent call logs (the decision ledger and audit log are never pruned)
+    allow_insecure_defaults: bool = False  # escape hatch for a non-local environment that really does want the dev defaults
+
+
+LOCAL_ENVIRONMENTS = {"local", "development", "dev", "test"}
+
+_DEV_JWT_SECRET = "dev-only-change-me-in-every-real-deployment"
+_DEV_VAULT_KEY = "y2N4x8dGm4KxG3nq6z2m3sVfR8k1cQ2s1r7pR9lY1yE="
+
+
+def is_local_environment(settings: "Settings") -> bool:
+    return settings.environment.lower() in LOCAL_ENVIRONMENTS
+
+
+def production_config_problems(settings: "Settings") -> list[str]:
+    """Insecure development defaults that must not survive into a real
+    environment. Empty for a local environment; the api refuses to start when
+    this is non-empty elsewhere (see app/main.py)."""
+    if is_local_environment(settings):
+        return []
+    problems = []
+    if settings.jwt_secret == _DEV_JWT_SECRET or len(settings.jwt_secret) < 32:
+        problems.append("JWT_SECRET is the development default or shorter than 32 characters — anyone can forge a login token")
+    if settings.secrets_provider == "local" and settings.vault_master_key == _DEV_VAULT_KEY:
+        problems.append("VAULT_MASTER_KEY is the development default — every stored connector credential is decryptable by anyone with this repository")
+    if settings.cors_allowed_origins.strip() in ("", "*"):
+        problems.append("CORS_ALLOWED_ORIGINS is '*' — set it to the dashboard origin(s), e.g. https://reo.example.com")
+    return problems
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -54,6 +54,23 @@ from ..ingestion.hackathon_dataset import (
 )
 from ..ingestion.quarantine import fetch_quarantined_file, quarantine_raw_file
 
+async def _read_limited(file: UploadFile, max_bytes: int, message: str) -> bytes:
+    """Read an upload in chunks and stop as soon as it exceeds the limit —
+    `await file.read()` followed by a length check would first pull an
+    arbitrarily large body fully into memory."""
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, message)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 log = logging.getLogger("api.routers.ingestion")
 
@@ -84,9 +101,7 @@ async def upload_telemetry_file(
     # mark_started_if_idle() — by explicit request, only an active database/
     # data_table connector in Connector Studio gates/auto-starts the
     # optimizer (see routers/operations.py's module docstring).
-    content = await file.read()
-    if len(content) > 100 * 1024 * 1024:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "file exceeds 100MB limit")
+    content = await _read_limited(file, 100 * 1024 * 1024, "file exceeds 100MB limit")
     filename = file.filename or "upload"
 
     # A filename matching one of the reference dataset's own 8 files (e.g.
@@ -140,7 +155,7 @@ async def upload_telemetry_file(
         db.commit()
         return FileIngestResponse(lineage_id=result.get("lineage_id"), rows_queued=rows_queued, filename=filename, detail={**result, "mapping_rule_reused": True})
 
-    assets = db.execute(select(Asset).where(Asset.tenant_id == ctx.tenant_id)).scalars().all()
+    assets = db.execute(select(Asset).where(Asset.tenant_id == ctx.tenant_id, Asset.effective_to.is_(None))).scalars().all()
     asset_context = [{"name": a.name, "asset_type": a.asset_type, "id": a.id} for a in assets]
     gateway = get_model_gateway()
     attach_circuit_breaker(gateway, db, ctx.tenant_id)
@@ -323,9 +338,7 @@ async def upload_document(
     ctx: AuthContext = Depends(require_permission("ingest:files")),
     db: Session = Depends(db_session),
 ) -> DocumentIntakeResponse:
-    content = await file.read()
-    if len(content) > 15 * 1024 * 1024:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "document exceeds 15MB limit")
+    content = await _read_limited(file, 15 * 1024 * 1024, "document exceeds 15MB limit")
     filename = file.filename or "upload"
     if Path(filename).suffix.lower() not in DOCUMENT_SUFFIXES:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"unsupported document type (supported: {sorted(DOCUMENT_SUFFIXES)})")

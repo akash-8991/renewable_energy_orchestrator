@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useState } from "react";
 import { api } from "../api/client";
 import Badge from "../components/Badge";
+import PortfolioRegistry from "../components/PortfolioRegistry";
 
 interface UserRow { id: string; email: string; display_name: string; roles: string[]; is_active: boolean }
 interface TenantRow { id: string; slug: string; name: string; deployment_mode: string; created_at: string }
@@ -35,6 +36,12 @@ export default function TenantAdministration() {
     onError: (err: any) => setError(err?.response?.data?.detail?.toString() || "Failed to create user"),
   });
 
+  const setActive = useMutation({
+    mutationFn: async (v: { id: string; is_active: boolean }) => (await api.patch(`/admin/users/${v.id}`, { is_active: v.is_active })).data,
+    onSuccess: () => { setError(null); qc.invalidateQueries({ queryKey: ["users"] }); },
+    onError: (err: any) => setError(err?.response?.data?.detail?.toString() || "Failed to update user"),
+  });
+
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     createUser.mutate();
@@ -49,7 +56,7 @@ export default function TenantAdministration() {
         <h3>Add user</h3>
         <div className="field"><label>Email</label><input value={email} onChange={(e) => setEmail(e.target.value)} required style={{ width: "100%" }} /></div>
         <div className="field"><label>Display name</label><input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required style={{ width: "100%" }} /></div>
-        <div className="field"><label>Password</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ width: "100%" }} /></div>
+        <div className="field"><label>Password (min. 10 characters)</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} style={{ width: "100%" }} /></div>
         <div className="field">
           <label>Role</label>
           <select value={role} onChange={(e) => setRole(e.target.value)} style={{ width: "100%" }}>
@@ -62,7 +69,7 @@ export default function TenantAdministration() {
       <h3 style={{ fontSize: 13, textTransform: "uppercase", color: "var(--text-dim)" }}>Users in this tenant</h3>
       <div className="table-scroll">
       <table>
-        <thead><tr><th>Email</th><th>Name</th><th>Roles</th><th>Active</th></tr></thead>
+        <thead><tr><th>Email</th><th>Name</th><th>Roles</th><th>Active</th><th></th></tr></thead>
         <tbody>
           {(users || []).map((u) => (
             <tr key={u.id}>
@@ -70,11 +77,22 @@ export default function TenantAdministration() {
               <td>{u.display_name}</td>
               <td>{u.roles.map((r) => <Badge key={r} text={r} />)}</td>
               <td>{u.is_active ? "yes" : "no"}</td>
+              <td>
+                <button className="secondary" disabled={setActive.isPending}
+                        onClick={() => {
+                          if (u.is_active && !window.confirm(`Deactivate ${u.email}? They lose access immediately.`)) return;
+                          setActive.mutate({ id: u.id, is_active: !u.is_active });
+                        }}>
+                  {u.is_active ? "Deactivate" : "Reactivate"}
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
       </div>
+
+      <PortfolioRegistry />
 
       {tenants && (
         <>

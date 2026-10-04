@@ -55,7 +55,7 @@ def get_portfolio_snapshot(
         sites = db.execute(select(Site).where(Site.portfolio_id == portfolio.id)).scalars().all()
         site_snapshots = []
         for site in sites:
-            assets = db.execute(select(Asset).where(Asset.site_id == site.id)).scalars().all()
+            assets = db.execute(select(Asset).where(Asset.site_id == site.id, Asset.effective_to.is_(None))).scalars().all()
             asset_snapshots = [
                 AssetSnapshot(
                     id=a.id, name=a.name, asset_type=a.asset_type, site_id=site.id,

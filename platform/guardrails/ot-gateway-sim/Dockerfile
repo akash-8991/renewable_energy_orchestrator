@@ -21,6 +21,11 @@ COPY platform/output /app/platform/output
 
 COPY platform/guardrails /app/platform/guardrails
 
+# Run as an unprivileged user: a compromised process shouldn't be root in the container.
+RUN useradd --system --uid 10001 --create-home app
+ENV HOME=/home/app
+USER app
+
 WORKDIR /app/platform/guardrails/ot-gateway-sim
 ENV PYTHONPATH=/app/platform:/app/platform/guardrails/ot-gateway-sim
 EXPOSE 8010

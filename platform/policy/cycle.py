@@ -69,12 +69,27 @@ def _load_forecast_series(db, tenant_id: str, asset_id: str, now: datetime, n_st
     return build_series(rows, valid_times)
 
 
-def run_cycle(trigger: str = "scheduled") -> str | None:
+def running_tenant_ids() -> list[str]:
+    """Every tenant whose optimizer is started — each gets its own cycle."""
+    db = SessionLocal()
+    try:
+        with break_glass_cross_tenant():
+            return list(db.execute(select(Tenant.id).where(Tenant.operating_state == "running").order_by(Tenant.created_at)).scalars())
+    finally:
+        db.close()
+
+
+def run_cycle(trigger: str = "scheduled", tenant_id: str | None = None) -> str | None:
+    """One decision cycle for `tenant_id` (or, for backwards compatibility
+    with a single-tenant deployment, the first tenant)."""
     db = SessionLocal()
     correlation_id = new_correlation_id("cyc")
     try:
         with break_glass_cross_tenant():
-            tenant = db.execute(select(Tenant)).scalars().first()
+            tenant = (
+                db.execute(select(Tenant).where(Tenant.id == tenant_id)).scalar_one_or_none()
+                if tenant_id else db.execute(select(Tenant)).scalars().first()
+            )
             if tenant is None:
                 log.info("no tenant provisioned yet, skipping cycle")
                 return None
@@ -91,7 +106,7 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             if portfolio is None:
                 return None
 
-            assets = db.execute(select(Asset).where(Asset.tenant_id == tenant_id)).scalars().all()
+            assets = db.execute(select(Asset).where(Asset.tenant_id == tenant_id, Asset.effective_to.is_(None))).scalars().all()
             batteries_rows = db.execute(select(Battery).where(Battery.tenant_id == tenant_id)).scalars().all()
             battery_by_asset = {b.asset_id: b for b in batteries_rows}
 
@@ -317,7 +332,7 @@ def run_cycle(trigger: str = "scheduled") -> str | None:
             # "bad" = flagged bad by the source itself, not merely old (a pipeline pause would otherwise flag every asset at once)
             actions.extend(maintenance_advisories(
                 tenant_id=tenant_id, decision_id=decision.id, now=now,
-                batteries=[BatteryHealth(b.asset_id, next((a.name for a in assets if a.id == b.asset_id), b.asset_id), b.soh_pct, b.warranty_cycles_remaining) for b in batteries_rows],
+                batteries=[BatteryHealth(b.asset_id, next((a.name for a in assets if a.id == b.asset_id), b.asset_id), b.soh_pct, b.warranty_cycles_remaining) for b in batteries_rows if b.asset_id in asset_by_id],
                 assets=[AssetDataHealth(r.asset_id, next((a.name for a in assets if a.id == r.asset_id), r.asset_id), "bad" if r.quality == "bad" else "fresh") for r in readings if r.metric == "power_kw"],
                 recently_raised={(row.asset_id, (row.envelope or {}).get("rule", "")) for row in recent},
             ))

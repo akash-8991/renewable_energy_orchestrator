@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import random
 import time
 from dataclasses import dataclass
@@ -26,6 +27,8 @@ from datetime import datetime, timezone
 
 from database.connection import SessionLocal, break_glass_cross_tenant
 from reo_common.events import CloudEvent, EventBus, STREAM_TELEMETRY
+from reo_common.heartbeat import beat
+from reo_common.config import get_settings, is_local_environment
 from models.canonical import Asset, Battery, Tenant
 from sqlalchemy import select
 
@@ -127,7 +130,7 @@ def load_portfolio() -> tuple[str, list[Asset], dict[str, Battery]]:
             tenant = db.execute(select(Tenant)).scalars().first()
             if tenant is None:
                 return "", [], {}
-            assets = db.execute(select(Asset).where(Asset.tenant_id == tenant.id)).scalars().all()
+            assets = db.execute(select(Asset).where(Asset.tenant_id == tenant.id, Asset.effective_to.is_(None))).scalars().all()
             batteries = db.execute(select(Battery).where(Battery.tenant_id == tenant.id)).scalars().all()
             battery_by_asset = {b.asset_id: b for b in batteries}
             return tenant.id, list(assets), battery_by_asset
@@ -142,10 +145,17 @@ def _reset_asset_state(assets: list[Asset], batteries: dict[str, Battery]) -> tu
 
 
 def main() -> None:
+    if not is_local_environment(get_settings()) and os.environ.get("SIMULATORS_ENABLED", "").lower() != "true":
+        # This service fabricates telemetry. In a real environment it would
+        # write synthetic readings into the live tenant next to the real ones.
+        log.error("edge-simulator refuses to run with ENVIRONMENT=%r: it publishes synthetic telemetry. "
+                  "Set SIMULATORS_ENABLED=true only for an evaluation/demo deployment.", get_settings().environment)
+        raise SystemExit(1)
     bus = EventBus()
 
     tenant_id, assets, batteries = "", [], {}
     while not assets:
+        beat("edge-simulator")
         tenant_id, assets, batteries = load_portfolio()
         if not assets:
             log.info("no seeded portfolio found yet — waiting for db/seed.py")
@@ -165,6 +175,7 @@ def main() -> None:
     # obvious. Self-healing here means a DB reset doesn't also require
     # remembering to restart this one specific container.
     while True:
+        beat("edge-simulator")
         current_tenant_id, current_assets, current_batteries = load_portfolio()
         if current_tenant_id != tenant_id and current_assets:
             log.info("tenant changed (%s -> %s) — reloading portfolio", tenant_id or "<none>", current_tenant_id)

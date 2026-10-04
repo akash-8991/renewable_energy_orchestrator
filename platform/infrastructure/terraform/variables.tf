@@ -78,3 +78,9 @@ variable "enable_secondary_region_dr" {
   type        = bool
   default     = false
 }
+
+variable "simulators_enabled" {
+  type        = bool
+  default     = true
+  description = "Allow edge-simulator and ot-gateway-sim to run (evaluation/demo deployments). Set false, and remove both services, when connecting a real site."
+}

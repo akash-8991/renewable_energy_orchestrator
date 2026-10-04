@@ -76,7 +76,13 @@ class EventBus:
         self._redis = redis.from_url(redis_url or settings.redis_url, decode_responses=True, socket_timeout=None)
 
     def publish(self, stream: str, event: CloudEvent) -> str:
-        return self._redis.xadd(stream, {"payload": json.dumps(event.to_dict())})
+        # Capped (approximately — Redis trims whole nodes, which is cheap) so a
+        # stream can never grow without bound: entries older than the cap were
+        # long since consumed, and the cap is far above any realistic backlog.
+        return self._redis.xadd(
+            stream, {"payload": json.dumps(event.to_dict())},
+            maxlen=STREAM_MAXLEN.get(stream, DEFAULT_STREAM_MAXLEN), approximate=True,
+        )
 
     def ensure_group(self, stream: str, group: str) -> None:
         try:
@@ -102,6 +108,10 @@ class EventBus:
         self._redis.xadd(f"{stream}.dlq", {"payload": json.dumps({**event.to_dict(), "error": error})})
         self.ack(stream, group, entry_id)
 
+
+# Retention caps per stream (entries). Telemetry is by far the busiest.
+DEFAULT_STREAM_MAXLEN = 20_000
+STREAM_MAXLEN: dict[str, int] = {"reo.telemetry": 500_000}
 
 # Canonical stream names used across services
 STREAM_TELEMETRY = "reo.telemetry"

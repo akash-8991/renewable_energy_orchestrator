@@ -36,7 +36,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (r) => r,
   (error) => {
-    if (error?.response?.status === 401) {
+    // A 401 means the session is gone — send the user to sign in again. Not for the sign-in
+    // request itself, though: there a 401 just means "wrong password", and the login page has to
+    // stay put to show that (and the 429 "too many attempts" message) instead of reloading blank.
+    const isLoginRequest = String(error?.config?.url ?? "").includes("/auth/login");
+    if (error?.response?.status === 401 && !isLoginRequest) {
       setToken(null);
       window.location.href = "/login";
     }

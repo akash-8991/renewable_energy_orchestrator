@@ -21,6 +21,11 @@ COPY platform/policy /app/platform/policy
 
 COPY platform/output /app/platform/output
 
+# Run as an unprivileged user: a compromised process shouldn't be root in the container.
+RUN useradd --system --uid 10001 --create-home app
+ENV HOME=/home/app
+USER app
+
 WORKDIR /app/platform/output/export-worker
 ENV PYTHONPATH=/app/platform:/app/platform/output/export-worker
 CMD ["python", "worker.py"]

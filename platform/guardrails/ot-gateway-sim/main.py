@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 import redis
 from fastapi import FastAPI
 from pydantic import BaseModel
-from reo_common.config import get_settings
+from reo_common.config import get_settings, is_local_environment
 from database.connection import SessionLocal, break_glass_cross_tenant
 from models.canonical import Asset, Battery, Telemetry
 from sqlalchemy import select
@@ -65,6 +65,20 @@ class CommandResponse(BaseModel):
     acknowledged: bool | None = None
     reason: str | None = None
     checked_at: str
+
+
+@app.on_event("startup")
+def _refuse_outside_local_unless_opted_in() -> None:
+    import os
+
+    if not is_local_environment(settings) and os.environ.get("SIMULATORS_ENABLED", "").lower() != "true":
+        # This is a *simulated* SCADA: it acknowledges commands, it controls nothing.
+        # Acting as an OT gateway in a real environment would mean "dispatched" signals
+        # that never reach any equipment.
+        raise RuntimeError(
+            f"ot-gateway-sim refuses to run with ENVIRONMENT={settings.environment!r}: it simulates equipment and "
+            "controls nothing real. Set SIMULATORS_ENABLED=true only for an evaluation/demo deployment."
+        )
 
 
 @app.get("/health")
@@ -141,6 +155,8 @@ def _independent_validate(req: CommandRequest) -> tuple[bool, str | None]:
             asset = db.execute(select(Asset).where(Asset.id == req.asset_id, Asset.tenant_id == req.tenant_id)).scalar_one_or_none()
             if asset is None:
                 return False, "asset not found in registry"
+            if asset.effective_to is not None:
+                return False, "asset has been retired — no command may be sent to it"
 
             # Freshness/quality check applies to every command type, not
             # just batteries: a curtailment, grid buy/sell, or demand-

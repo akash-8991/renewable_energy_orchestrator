@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..deps import db_session, require_permission
+from ..security_http import password_problem
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -114,8 +115,9 @@ def create_user(
     invalid = set(body.roles) - VALID_ROLES
     if invalid:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"invalid roles: {invalid}")
-    if len(body.password.encode("utf-8")) > 72:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "password exceeds 72 bytes")
+    problem = password_problem(body.password)
+    if problem:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, problem)
 
     existing = db.execute(select(User).where(User.tenant_id == ctx.tenant_id, User.email == body.email)).scalar_one_or_none()
     if existing:
@@ -134,3 +136,72 @@ def create_user(
 def list_users(ctx: AuthContext = Depends(require_permission("manage:users")), db: Session = Depends(db_session)) -> list[UserSummary]:
     rows = db.execute(select(User).order_by(User.created_at.desc())).scalars().all()
     return [UserSummary(id=u.id, email=u.email, display_name=u.display_name, roles=u.roles, is_active=u.is_active) for u in rows]
+
+
+class UserUpdateRequest(BaseModel):
+    is_active: bool | None = None
+    roles: list[str] | None = None
+    display_name: str | None = None
+    password: str | None = None  # admin-initiated reset
+
+
+def _active_tenant_admins(db: Session, tenant_id: str) -> int:
+    rows = db.execute(select(User).where(User.tenant_id == tenant_id, User.is_active.is_(True))).scalars().all()
+    return sum(1 for u in rows if Role.TENANT_ADMIN.value in (u.roles or []))
+
+
+@router.patch("/users/{user_id}", response_model=UserSummary)
+def update_user(
+    user_id: str, body: UserUpdateRequest,
+    ctx: AuthContext = Depends(require_permission("manage:users")), db: Session = Depends(db_session),
+) -> UserSummary:
+    """Deactivate/reactivate a user, change their roles, or reset their
+    password. Takes effect on the user's very next request — the api checks
+    the account on every call rather than trusting the token it issued."""
+    user = db.execute(select(User).where(User.id == user_id, User.tenant_id == ctx.tenant_id)).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+
+    changes: dict = {}
+    if body.roles is not None:
+        invalid = set(body.roles) - VALID_ROLES
+        if invalid:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"invalid roles: {invalid}")
+        changes["roles"] = {"from": list(user.roles or []), "to": body.roles}
+    if body.is_active is not None and body.is_active != user.is_active:
+        changes["is_active"] = {"from": user.is_active, "to": body.is_active}
+    if body.display_name is not None:
+        changes["display_name"] = body.display_name
+    if body.password is not None:
+        problem = password_problem(body.password)
+        if problem:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, problem)
+        changes["password_reset"] = True
+
+    # never let a tenant lose its last administrator, and don't let an admin
+    # lock themselves out by accident
+    loses_admin = (
+        ("roles" in changes and Role.TENANT_ADMIN.value not in body.roles)
+        or changes.get("is_active", {}).get("to") is False
+    ) and Role.TENANT_ADMIN.value in (user.roles or []) and user.is_active
+    if loses_admin and _active_tenant_admins(db, ctx.tenant_id) <= 1:
+        raise HTTPException(status.HTTP_409_CONFLICT, "this is the tenant's last active administrator — create or promote another one first")
+    if user.id == ctx.user_id and changes.get("is_active", {}).get("to") is False:
+        raise HTTPException(status.HTTP_409_CONFLICT, "you cannot deactivate your own account")
+
+    if "roles" in changes:
+        user.roles = body.roles
+    if "is_active" in changes:
+        user.is_active = body.is_active
+    if "display_name" in changes:
+        user.display_name = body.display_name
+    if body.password is not None:
+        user.hashed_password = hash_password(body.password)
+    db.flush()
+    event = "user.deactivated" if changes.get("is_active", {}).get("to") is False else "user.updated"
+    append_audit_event(
+        db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
+        event_type=event, payload={"user_id": user.id, "email": user.email, "changes": {k: v for k, v in changes.items() if k != "password_reset"}, "password_reset": bool(body.password)},
+    )
+    db.commit()
+    return UserSummary(id=user.id, email=user.email, display_name=user.display_name, roles=user.roles, is_active=user.is_active)

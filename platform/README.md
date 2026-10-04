@@ -157,6 +157,14 @@ cd platform
 python3 tests/demo_runner.py --base-url http://localhost:8000
 ```
 
+### Production use
+
+A real deployment doesn't use the demo seed: `database/bootstrap.py` creates your tenant and first
+administrator, and **Tenant Administration → Portfolio registry** is where you register your sites and
+assets. The api refuses to start outside a local environment with development secrets, throttles
+sign-ins, checks the account on every request, and exposes `/ready`. See the *Production hardening
+checklist*, backup/restore and upgrade notes in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
 ### Forecasts, scenarios, maintenance
 
 Forecasts are a physics-based baseline plus a trained ML model per asset; **operators accept the

@@ -23,6 +23,7 @@ from openpyxl.styles import Font
 from reo_common.config import get_settings
 from database.connection import SessionLocal, break_glass_cross_tenant
 from reo_common.events import EventBus
+from reo_common.heartbeat import beat
 from models.canonical import Action, Approval, Command, Decision, ExportJob, Signal
 from sqlalchemy import select
 
@@ -209,6 +210,7 @@ def main() -> None:
     bus.ensure_group(STREAM_EXPORT_REQUESTED, "export-worker")
     log.info("export-worker started, watching %s", STREAM_EXPORT_REQUESTED)
     while True:
+        beat("export-worker")
         events = bus.consume(STREAM_EXPORT_REQUESTED, "export-worker", "worker-1", block_ms=5000)
         for entry_id, event in events:
             export_job_id = event.data.get("export_job_id")

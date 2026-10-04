@@ -244,6 +244,25 @@ declarative API (`BrowserRouter`/`Routes`/`Route`/`Link`/`NavLink`/`useNavigate`
 which v7 keeps backward-compatible — the data-router/loader APIs that would need real migration work
 were never used here.
 
+## Production hardening — what is and isn't covered
+
+Added after an end-to-end review (`PRODUCTION_READINESS_REVIEW.md` §5). Still deliberate simplifications:
+
+- **Single api replica.** SSO's CSRF `state` is held in process memory. The login throttle, heartbeats
+  and event bus are Redis-backed and replica-safe; moving the SSO state there is the remaining step.
+- **Account checks are one DB read per request** (indexed primary key), not cached — simple and
+  immediate; a cache would trade revocation latency for load and isn't needed at this scale.
+- **No MFA, no password-expiry or history.** Federate with an IdP that provides them.
+- **No metrics endpoint / tracing.** Liveness (`/health`), readiness (`/ready`), container healthchecks
+  with worker heartbeats and CloudWatch logs only.
+- **The folder watcher and the reference-dataset ingestion still target the default tenant**
+  (`DEFAULT_TENANT_SLUG`) — connectors, the poller, the optimizer and the agents are fully per-tenant.
+- **`ot-gateway-sim` is the only OT path.** A real gateway adapter is outside this repository
+  (see the SCADA note above) — which is why the simulators refuse to run outside local unless explicitly
+  enabled.
+- **Compose is a local/evaluation deployment.** The Vite dev server, Keycloak `start-dev` and laptop
+  default credentials are not for production; the Terraform stack is.
+
 ## Forecasting, scenarios and maintenance — design decisions
 
 - **Forecasts are a physics baseline *and* a trained ML model, chosen by the operator.** The ML model
