@@ -268,7 +268,8 @@ pip install -r backend/requirements.txt -r policy/requirements.txt -r agent/requ
 pip install pytest
 
 # Use a throwaway database, not the one the platform runs on: several tests commit, and a committed
-# test connector would be picked up by the running api's poller.
+# test connector would be picked up by the running api's poller. (`docker compose down -v` deletes
+# this database along with everything else — if the suite suddenly errors on connect, recreate it.)
 docker compose exec -T postgres psql -U reo -d postgres -c "CREATE DATABASE reo_test"
 (cd database && DATABASE_URL=postgresql+psycopg2://reo:reo@127.0.0.1:5433/reo_test alembic upgrade head)
 
