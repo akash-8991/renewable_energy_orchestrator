@@ -15,7 +15,7 @@ const KIND_OPTIONS = [
   { value: "scada", label: "SCADA API", help: "An external SCADA/OPC-UA gateway. Registers and reachability-tests the endpoint — live OT dispatch always goes through the separate, safety-critical ot-gateway-sim path, never a registered connector, regardless of activation status." },
   { value: "iot", label: "IoT API", help: "A device/sensor platform (smart meters, edge gateways). Once active, \"Ingest now\" fetches its JSON in the generic asset_id/metric/event_time/value/unit shape and publishes it as real telemetry — the same path a file upload uses. Does not unlock Start Optimizer on its own." },
   { value: "database", label: "Database", help: "A Postgres connection string (postgresql://user:pass@host:port/db) — e.g. the bundled reference source-db: postgresql://reo_source:reo-source-secret@source-db:5432/client_export. Once active, set a table name and \"Ingest now\" connects and pulls that table in, through the same reference-dataset mapping data_table ingestion uses below." },
-  { value: "data_table", label: "Data table (path/link)", help: "A CSV/JSON/XLSX URL, or a bare filename already sitting in the platform's watched data folder (e.g. 03_renewable_generation.csv) — not your computer's own path to that folder, which means nothing inside the platform's containers. A recognized reference-dataset filename is mapped onto real telemetry/customers automatically; anything else is expected in the generic asset_id/metric/event_time/value/unit shape." },
+  { value: "data_table", label: "Data table (path/link)", help: "A CSV/JSON/XLSX URL, a filename in the platform's data folder (e.g. 03_renewable_generation.csv), or \".\" for every supported file in that folder. A recognized reference-dataset filename is mapped onto real telemetry/customers automatically; anything else is expected in the generic asset_id/metric/event_time/value/unit shape." },
 ];
 
 // Matches backend/app/routers/operations.py's has_data_source check exactly:
@@ -84,7 +84,12 @@ export default function ConnectorStudio() {
     mutationFn: async (id: string) => (await api.post(`/connectors/${id}/ingest`)).data,
     onSuccess: (result) => {
       const detail = result.detail;
-      const message = detail && detail.status !== "ingested"
+      const folderMessage = detail?.status === "folder"
+        ? `Folder "${detail.folder}": ${detail.files_ingested} file(s) ingested (${result.rows_queued} rows), ${detail.files_unchanged} unchanged` +
+          (detail.files_failed ? `, ${detail.files_failed} failed — ` + detail.files.filter((f: any) => f.status === "error").map((f: any) => `${f.file}: ${f.error}`).join("; ") : "") +
+          (detail.files.some((f: any) => f.status === "not_mapped") ? `. Not mapped: ${detail.files.filter((f: any) => f.status === "not_mapped").map((f: any) => f.file).join(", ")}` : "") + "."
+        : null;
+      const message = folderMessage ? folderMessage : detail && detail.status !== "ingested"
         ? (detail.message || `${detail.table}: ${detail.status}`)
         : `${result.rows_queued} row(s)/reading(s) processed${detail?.table ? ` for ${detail.table}` : ""}.`;
       setIngestMessage(message);
@@ -134,7 +139,7 @@ export default function ConnectorStudio() {
           </div>
           <div className="field">
             <label>
-              {isDataTable ? "Data path / link (.csv/.json/.xlsx URL, or a bare watched-folder filename — not a full path)"
+              {isDataTable ? "Data path / link (.csv/.json/.xlsx URL, a filename in the data folder, or . for the whole folder)"
                 : isDatabase ? "Connection string (postgresql://...)" : "Endpoint URL"}
             </label>
             <input
@@ -142,16 +147,17 @@ export default function ConnectorStudio() {
               onChange={(e) => setUrl(e.target.value)}
               required
               placeholder={
-                isDataTable ? "https://example.com/exports/telemetry.csv  or just  03_renewable_generation.csv"
+                isDataTable ? "03_renewable_generation.csv   or   .   (every file in the data folder)"
                   : isDatabase ? "postgresql://reo_source:reo-source-secret@source-db:5432/client_export" : undefined
               }
               style={{ width: "100%" }}
             />
             {isDataTable && (
               <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                For a local file, place it in this platform's own <code className="mono">data/</code> folder first,
-                then enter just its filename here (e.g. <code className="mono">03_renewable_generation.csv</code>) —
-                not your computer's path to that folder, which the platform's containers can't resolve.
+                For local files, place them in this platform's own <code className="mono">data/</code> folder, then enter one
+                filename (e.g. <code className="mono">03_renewable_generation.csv</code>) or <code className="mono">.</code> to
+                ingest every .csv/.json/.xlsx file in that folder (a sub-folder name works too). Re-checked every
+                minute; only new or changed files are ingested.
               </p>
             )}
           </div>
@@ -195,7 +201,7 @@ export default function ConnectorStudio() {
                 </td>
                 <td><Badge text={c.status} /></td>
                 <td className="muted">{c.credential_masked ? JSON.stringify(c.credential_masked) : "none"}</td>
-                <td>{c.last_test_result ? (c.last_test_result.http_status ?? (c.last_test_result.ssrf_allowed ? "reachable?" : "blocked")) : "—"}</td>
+                <td>{c.last_test_result ? (c.last_test_result.note ?? c.last_test_result.http_status ?? (c.last_test_result.ssrf_allowed ? "reachable?" : "blocked")) : "—"}</td>
                 <td className="muted" style={{ fontSize: 13 }} title={c.last_auto_ingest?.error}>
                   {c.last_auto_ingest
                     ? `${c.last_auto_ingest.outcome === "ingested" ? `${c.last_auto_ingest.rows} new rows` : c.last_auto_ingest.outcome === "no_new_data" ? "monitoring · no new data" : c.last_auto_ingest.outcome} · ${new Date(c.last_auto_ingest.polled_at).toLocaleTimeString()}`

@@ -172,6 +172,8 @@ a { color: var(--accent); text-decoration: none; }
 }
 .card h3 { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: var(--text); }
 .card .big { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.break-all { overflow-wrap: anywhere; word-break: break-all; }
+.card-help, .field-hint { overflow-wrap: anywhere; }
 .card-help { font-size: 13px; color: var(--text-dim); margin: 0 0 14px; line-height: 1.5; }
 .card-footer { margin-top: auto; padding-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 

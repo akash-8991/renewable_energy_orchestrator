@@ -220,7 +220,7 @@ table name is expected in the generic shape: `asset_id, metric, event_time, valu
 For a CSV/JSON/XLSX export that gets dropped somewhere on a schedule (an SFTP pull job, a nightly
 export, a shared drive), rather than a live database connection.
 
-**Two address forms** for `endpoint_url`:
+**Three address forms** for `endpoint_url`:
 - An `http(s)://` URL — fetched fresh on every "Ingest now" and on every automatic poll (SSRF-checked: no loopback, link-local,
   or cloud-metadata addresses).
 - A **bare filename** already sitting directly inside the platform's watched local folder
@@ -232,6 +232,26 @@ export, a shared drive), rather than a live database connection.
   produces a `"... was not found under the watched data folder"` error even though the folder
   genuinely exists on your machine, because the platform can only ever look inside its own mounted
   `/data`, joined with whatever you typed.
+- **The whole folder** — enter **`.`** (or `/`, `*`) to ingest *every* `.csv` / `.json` / `.xlsx`
+  file in the watched data folder, or the name of a sub-folder inside it to ingest just that one. As
+  a convenience, the host path to your data folder (anything ending in `/data`, such as
+  `/Users/you/project/data`) is also taken to mean "the data folder", since that is the only folder
+  the platform can see. How a folder connector behaves:
+  - Files are processed in name order; each recognised reference-dataset file goes through its
+    canonical mapping, anything else must be the generic `asset_id`/`metric`/`event_time`/`value`/`unit`
+    shape.
+  - **Each file stands alone.** One bad file is reported (by name, with the reason) without stopping
+    the others or undoing their work; the result lists every file as `ingested`, `unchanged`,
+    `not_mapped` or `error`. If *no* file could be ingested the request fails with the reasons.
+  - **Change detection is per file** (name + size + modification time), so on the minute-by-minute
+    automatic re-read an unchanged multi-megabyte file isn't even opened. A new or modified file is
+    ingested; a generic readings file that grew only contributes its newer rows. A folder with
+    nothing new shows `monitoring · no new data` in Connector Studio and triggers no decision.
+  - Hidden files and other file types are ignored; at most 200 files per folder; sub-folders are not
+    descended into (point a second connector at one if you want it).
+  - Ingesting the full reference dataset takes about a minute and a half (it aggregates 863,600
+    customer readings on the way in); *Test* first tells you what it found
+    (`folder with 8 supported file(s): …`).
 
 ```bash
 curl -X POST http://localhost:8000/connectors \
@@ -673,8 +693,8 @@ immediately, regardless of the current autonomy mode.
 **Audit & Exports** (sidebar) → **Audit Chain** tab shows the hash-chain integrity badge and every
 audit event; the **Governed Export** tab has a single **Generate export** button (produces an Excel
 workbook — Decisions/Signals/Reasoning/Approvals/Acknowledgements/Export Metadata — for the last 500
-decisions, requires the Auditor/DPO role). It shows a live status badge while running, then a
-**Download .xlsx** button and its SHA-256 checksum once complete.
+decisions, requires the Auditor/DPO role). It shows a live status badge while running, then the
+export's SHA-256 checksum and a **Download .xlsx** button next to **Generate export** once complete.
 
 ### Everything else
 

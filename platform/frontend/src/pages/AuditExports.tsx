@@ -67,28 +67,31 @@ export default function AuditExports() {
         <div className="card-grid"><div className="card">
           <h3>Governed export</h3>
           <p className="card-help">
-            Generates a governed Excel workbook (Decisions/Signals/Reasoning/Approvals/Acknowledgements/Export
-            Metadata sheets) for the last 500 decisions. Requires the Auditor/DPO role.
+            Generates a governed Excel workbook for the last 500 decisions, with Decisions, Signals, Reasoning,
+            Approvals, Acknowledgements and Export Metadata sheets. Requires the Auditor/DPO role.
           </p>
-          <div className="card-footer" style={{ marginTop: 0, paddingTop: 0 }}>
-          <button onClick={() => requestExport.mutate()} disabled={requestExport.isPending || (!!polling && activeExport?.status !== "complete" && activeExport?.status !== "failed")}>
-            Generate export
-          </button>
-          </div>
           {activeExport && (
-            <div style={{ marginTop: 14 }}>
-              <div className="row">
+            <div className="card-body">
+              <div className="row" style={{ marginBottom: 10 }}>
                 <Badge text={activeExport.status} />
                 {activeExport.row_count !== null && <span className="muted">{activeExport.row_count} rows</span>}
               </div>
-              {activeExport.checksum_sha256 && <div className="mono muted" style={{ fontSize: 12, marginTop: 6 }}>sha256 {activeExport.checksum_sha256}</div>}
-              {activeExport.download_url && (
-                <a href={activeExport.download_url} style={{ display: "inline-block", marginTop: 10 }}>
-                  <button>Download .xlsx</button>
-                </a>
+              {activeExport.checksum_sha256 && (
+                <div className="field">
+                  <label>SHA-256 checksum</label>
+                  <div className="mono break-all">{activeExport.checksum_sha256}</div>
+                </div>
               )}
             </div>
           )}
+          <div className="card-footer">
+            <button onClick={() => requestExport.mutate()} disabled={requestExport.isPending || (!!polling && activeExport?.status !== "complete" && activeExport?.status !== "failed")}>
+              Generate export
+            </button>
+            {activeExport?.download_url && (
+              <a href={activeExport.download_url}><button className="secondary">Download .xlsx</button></a>
+            )}
+          </div>
         </div></div>
       )}
     </div>

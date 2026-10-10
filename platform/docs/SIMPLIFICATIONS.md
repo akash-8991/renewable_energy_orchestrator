@@ -161,6 +161,11 @@ of its activation status, by design, not by omission — this is the one item on
   their rows carry synthetic, re-based timestamps, so there is no meaningful `event_time` to compare. A real deployment would use a proper scheduler with per-connector intervals and CDC /
   push (webhook, Kafka) for sources that support it; here one global interval applies and "changed"
   means "content differs", not row-level change detection.
+- **Folder connectors** (`data_table` with `.` or a sub-folder): non-recursive, at most 200 files,
+  processed sequentially inside one request/poll (a full reference-dataset load is ~90 s). Per-file
+  change detection uses name + size + mtime rather than a content hash, so a file rewritten with the
+  same size and an unchanged modification time would be missed — fine for an export dropped into a
+  folder, not a substitute for a real object-store event or CDC feed.
 - `database`: `endpoint_url` is instead a `postgresql://` connection string, egress-checked the
   same way an HTTP endpoint is (`guardrails/ssrf.py`'s `check_outbound_host`) but restricted to an
   explicit allow-list (currently just the reference `source-db` container — see

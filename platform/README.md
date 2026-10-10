@@ -236,7 +236,8 @@ python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e packages/reo_common
 pip install -r backend/requirements.txt -r policy/requirements.txt -r agent/requirements.txt
 pip install pytest
-DATABASE_URL=postgresql+psycopg2://reo:reo@127.0.0.1:5433/reo pytest tests -v
+# against a throwaway database (some tests commit) — see docs/DEPLOYMENT.md A8 for creating reo_test
+DATABASE_URL=postgresql+psycopg2://reo:reo@127.0.0.1:5433/reo_test pytest tests -v
 ```
 
 ## AWS deployment (Terraform, not applied)

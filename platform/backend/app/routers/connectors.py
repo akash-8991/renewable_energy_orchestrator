@@ -72,6 +72,35 @@ def _resolve_local_data_path(path_str: str) -> Path:
     return candidate
 
 
+SUPPORTED_DATA_SUFFIXES = (".csv", ".json", ".xlsx", ".xlsm")
+MAX_FOLDER_FILES = 200
+
+
+def _resolve_local_source(path_str: str) -> Path:
+    """Like _resolve_local_data_path, but also understands "the whole data
+    folder": `.`, `/` or `*` mean the watched folder itself, and so does a path
+    whose last segment is `data` that doesn't exist inside the container (the
+    host-side path to the folder people naturally paste — it can only ever mean
+    the one folder the platform can see). A real sub-folder works too. Whatever
+    it resolves to is still confined to the watched folder."""
+    watch_dir = Path(settings.data_watch_dir).resolve()
+    cleaned = path_str.strip()
+    name = Path(cleaned.rstrip("/")).name if cleaned.strip("/") else ""
+    if name in ("", ".", "*"):
+        return watch_dir
+    candidate = _resolve_local_data_path(cleaned)
+    if name == "data" and not candidate.exists():
+        return watch_dir
+    return candidate
+
+
+def _list_data_files(folder: Path) -> list[Path]:
+    return sorted(
+        p for p in folder.iterdir()
+        if p.is_file() and not p.name.startswith(".") and p.suffix.lower() in SUPPORTED_DATA_SUFFIXES
+    )[:MAX_FOLDER_FILES]
+
+
 def _missing_local_file_message(path_str: str) -> str:
     """A `data_table` connector's local-path field expects a bare filename
     from the platform's watched data folder (DATA_WATCH_DIR, mounted from
@@ -87,9 +116,10 @@ def _missing_local_file_message(path_str: str) -> str:
     if "/" in path_str.strip("/"):
         return (
             f"{base_message}. This field expects a bare filename that already exists directly "
-            f"inside the watched data folder (e.g. \"03_renewable_generation.csv\"), not a full "
-            f"path — the host's own folder path means nothing inside the container. Copy the file "
-            f"into this platform's data/ directory first, then enter just its filename here."
+            f"inside the watched data folder (e.g. \"03_renewable_generation.csv\"), or \".\" to "
+            f"ingest every supported file in that folder — not a full path, because the host's own "
+            f"folder path means nothing inside the container. Copy the file into this platform's "
+            f"data/ directory first, then enter just its filename here."
         )
     return base_message
 
@@ -226,6 +256,7 @@ class ConnectorTestResult(BaseModel):
     ssrf_reason: str | None
     http_reachable: bool | None = None
     http_status: int | None = None
+    note: str | None = None
     error: str | None = None
 
 
@@ -246,14 +277,20 @@ def test_connector(
             result.error = err
     elif _is_local_data_table_path(connector.kind, connector.endpoint_url):
         try:
-            candidate = _resolve_local_data_path(connector.endpoint_url)
-            exists = candidate.is_file()
+            candidate = _resolve_local_source(connector.endpoint_url)
+            exists = candidate.is_file() or candidate.is_dir()
         except ValueError as exc:
             result = ConnectorTestResult(ssrf_allowed=False, ssrf_reason=str(exc))
         else:
             result = ConnectorTestResult(ssrf_allowed=True, ssrf_reason=None)
-            result.http_reachable = exists  # repurposed here as "file exists under the watched folder"
-            if not exists:
+            result.http_reachable = exists  # repurposed here as "file/folder exists under the watched folder"
+            if candidate.is_dir():
+                files = _list_data_files(candidate)
+                result.note = f"folder with {len(files)} supported file(s)" + (": " + ", ".join(p.name for p in files[:4]) + (" …" if len(files) > 4 else "") if files else "")
+                if not files:
+                    result.http_reachable = False
+                    result.error = "this folder holds no .csv/.json/.xlsx files to ingest"
+            elif not exists:
                 result.error = _missing_local_file_message(connector.endpoint_url)
     else:
         ssrf_result = check_outbound_url(connector.endpoint_url)
@@ -452,6 +489,7 @@ class _ContentGate:
         self._skip = skip_unchanged
         self._pending: str | None = None
         self._pending_marks: dict[str, str] = {}
+        self.children: list["_ContentGate"] = []  # per-file gates when a connector points at a folder
 
     def check(self, material: bytes) -> None:
         digest = hashlib.sha256(material).hexdigest()
@@ -481,6 +519,8 @@ class _ContentGate:
         return fresh
 
     def commit(self) -> None:
+        for child in self.children:
+            child.commit()
         if self._pending is not None:
             _fingerprint_store().set(self._key, self._pending)
         if self._pending_marks:
@@ -648,23 +688,36 @@ def _ingest_from_source(
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"could not fetch {connector.endpoint_url}: {exc}") from exc
     else:
         try:
-            candidate = _resolve_local_data_path(connector.endpoint_url)
+            candidate = _resolve_local_source(connector.endpoint_url)
         except ValueError as exc:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        if candidate.is_dir():
+            return _ingest_folder(db, ctx, connector, candidate, gate)
         if not candidate.is_file():
             raise HTTPException(status.HTTP_400_BAD_REQUEST, _missing_local_file_message(connector.endpoint_url))
         filename = candidate.name
-        if candidate.suffix.lower() not in (".csv", ".json", ".xlsx", ".xlsm"):
+        if candidate.suffix.lower() not in SUPPORTED_DATA_SUFFIXES:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"path must end in .csv/.json/.xlsx (got {filename!r})")
         content = candidate.read_bytes()
 
     gate.check(content)
+    rows_queued, lineage_id, detail = _ingest_data_file(db, ctx, connector, filename, content, gate)
+    return _finish_ingest(db, ctx, connector, rows_queued=rows_queued, lineage_id=lineage_id, detail=detail)
 
+
+def _ingest_data_file(
+    db: Session, ctx: AuthContext, connector: Connector, filename: str, content: bytes, gate: _ContentGate,
+) -> tuple[int, str | None, dict | None]:
+    """Parse and ingest one CSV/JSON/XLSX file. A recognised reference-dataset
+    file goes through its canonical mapping; anything else must be the generic
+    asset_id/metric/event_time/value/unit shape (and, when polling, only
+    readings newer than last time are taken). Returns (rows, lineage_id,
+    detail)."""
     table_key = normalize_table_key(filename)
     if table_key in KNOWN_TABLE_KEYS:
         rows = rows_from_file(filename, content)
         result = ingest_reference_rows(db, ctx.tenant_id, table_key, rows, source_label=f"connector:{connector.name}")
-        return _finish_ingest(db, ctx, connector, rows_queued=result.get("count", 0), lineage_id=result.get("lineage_id"), detail=result)
+        return result.get("count", 0), result.get("lineage_id"), result
 
     try:
         readings = parse_telemetry_file(filename, content)
@@ -677,4 +730,64 @@ def _ingest_from_source(
     from reo_common.events import EventBus
 
     lineage_id = publish_readings(EventBus(), ctx.tenant_id, readings, lineage_id=f"connector:{connector.id}")
-    return _finish_ingest(db, ctx, connector, rows_queued=len(readings), lineage_id=lineage_id, detail=None)
+    return len(readings), lineage_id, None
+
+
+def _ingest_folder(db: Session, ctx: AuthContext, connector: Connector, folder: Path, gate: _ContentGate) -> ConnectorIngestResponse:
+    """Ingest every supported file in a folder under the watched data folder.
+
+    Each file is handled on its own: it has its own change check (name + size +
+    modification time, so an unchanged multi-megabyte file isn't even re-read on
+    every poll) and its own savepoint, so one bad file is reported without
+    stopping the others or undoing their work. Files are processed in name
+    order."""
+    files = _list_data_files(folder)
+    watch_dir = Path(settings.data_watch_dir).resolve()
+    shown = "." if folder == watch_dir else str(folder.relative_to(watch_dir))
+    if not files:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"no .csv/.json/.xlsx files found in the data folder {shown!r}")
+
+    results: list[dict] = []
+    total_rows = 0
+    last_lineage: str | None = None
+    for path in files:
+        file_gate = _ContentGate(f"{connector.id}:{path.name}", gate._skip)  # noqa: SLF001
+        stat = path.stat()
+        try:
+            file_gate.check(f"{path.name}|{stat.st_size}|{stat.st_mtime_ns}".encode("utf-8"))
+        except _Unchanged:
+            results.append({"file": path.name, "status": "no_new_data", "rows": 0})
+            continue
+        try:
+            with db.begin_nested():
+                rows, lineage_id, detail = _ingest_data_file(db, ctx, connector, path.name, path.read_bytes(), file_gate)
+        except _Unchanged:  # generic readings, none newer than what was ingested before
+            gate.children.append(file_gate)
+            results.append({"file": path.name, "status": "no_new_data", "rows": 0})
+            continue
+        except HTTPException as exc:
+            results.append({"file": path.name, "status": "error", "rows": 0, "error": str(exc.detail)})
+            continue
+        except Exception as exc:  # noqa: BLE001 — reported per file, never allowed to sink the others
+            results.append({"file": path.name, "status": "error", "rows": 0, "error": f"{type(exc).__name__}: {exc}"})
+            continue
+        gate.children.append(file_gate)
+        total_rows += rows
+        last_lineage = lineage_id or last_lineage
+        entry = {"file": path.name, "status": (detail or {}).get("status", "ingested"), "rows": rows}
+        if detail and detail.get("message"):
+            entry["message"] = detail["message"]
+        results.append(entry)
+
+    errors = [r for r in results if r["status"] == "error"]
+    if total_rows == 0:
+        if errors:  # nothing came in and something failed: surface it (and retry next poll) without an audit entry per attempt
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "no file in the folder could be ingested — " + "; ".join(f"{e['file']}: {e['error']}" for e in errors[:3]))
+        if all(r["status"] == "no_new_data" for r in results):
+            raise _Unchanged()  # nothing new anywhere in the folder: keep monitoring, ingest nothing
+    summary = {
+        "status": "folder", "folder": shown, "files": results, "files_seen": len(files),
+        "files_ingested": sum(1 for r in results if r["status"] not in ("error", "no_new_data")),
+        "files_unchanged": sum(1 for r in results if r["status"] == "no_new_data"), "files_failed": len(errors),
+    }
+    return _finish_ingest(db, ctx, connector, rows_queued=total_rows, lineage_id=last_lineage, detail=summary)

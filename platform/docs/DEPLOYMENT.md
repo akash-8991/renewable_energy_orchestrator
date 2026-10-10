@@ -267,7 +267,12 @@ pip install -e packages/reo_common
 pip install -r backend/requirements.txt -r policy/requirements.txt -r agent/requirements.txt
 pip install pytest
 
-DATABASE_URL=postgresql+psycopg2://reo:reo@127.0.0.1:5433/reo \
+# Use a throwaway database, not the one the platform runs on: several tests commit, and a committed
+# test connector would be picked up by the running api's poller.
+docker compose exec -T postgres psql -U reo -d postgres -c "CREATE DATABASE reo_test"
+(cd database && DATABASE_URL=postgresql+psycopg2://reo:reo@127.0.0.1:5433/reo_test alembic upgrade head)
+
+DATABASE_URL=postgresql+psycopg2://reo:reo@127.0.0.1:5433/reo_test \
 REDIS_URL=redis://127.0.0.1:6380/0 \
 pytest tests -v
 ```
@@ -315,12 +320,15 @@ docker volume rm reo_reo-source-db-data
 docker compose up -d source-db
 ```
 
-1. **Folder path** — Connector Studio → *+ New connector* → kind **Data table (path/link)** → for
-   "Data path / link" enter just the bare filename, e.g. `03_renewable_generation.csv` (or any
-   other file from the list in A9's table) — **not** your machine's own path to `platform/../data/`
-   (that host path means nothing inside the containers; only the bare filename resolves against
-   the watched folder they're mounted into). Test it, activate it as a *different* user
-   (maker-checker), then **Ingest now**.
+1. **File or folder path** — Connector Studio → *+ New connector* → kind **Data table (path/link)** →
+   for "Data path / link" enter either a bare filename, e.g. `03_renewable_generation.csv` (any file
+   from the list in A9's table), or **`.`** to ingest *every* supported file in the data folder in one
+   connector (it is then re-checked every minute, and only new or changed files are ingested). Don't
+   enter your machine's own path to a *file* — that host path means nothing inside the containers (the
+   one exception: a path ending in `/data` is understood as "the data folder"). Test it, activate it
+   as a *different* user (maker-checker), then **Ingest now**. Loading all eight reference files this
+   way takes about 90 seconds and reports each file's outcome (`05_battery.csv` and
+   `08_scenario_actions.csv` come back `not_mapped`, by design).
 2. **Database connection** — kind **Database** → connection string
    `postgresql://reo_source:reo-source-secret@source-db:5432/client_export` → table name e.g.
    `renewable_generation`, `grid`, `market`, `external_weather`, `customer_demographics`, or
