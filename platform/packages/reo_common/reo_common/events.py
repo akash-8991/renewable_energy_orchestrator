@@ -121,6 +121,12 @@ STREAM_SIGNAL_STATE = "reo.signal.state"
 STREAM_DASHBOARD_FANOUT = "reo.dashboard.fanout"
 STREAM_EVAL_REQUEST = "reo.eval.request"
 
+# At most one evaluation run per tenant is queued or running at a time: the API sets this marker
+# when it queues a run, the agent-worker clears it when the run ends. The TTL is only a safety net
+# for a worker that dies mid-run.
+EVAL_INFLIGHT_KEY = "reo:eval:inflight:{tenant_id}"
+EVAL_INFLIGHT_TTL_SECONDS = 30 * 60
+
 
 def request_decision_cycle(bus: EventBus, tenant_id: str | None, trigger: str, **data) -> str:
     """Ask the optimizer-worker for an immediate decision cycle (rather than

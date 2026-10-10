@@ -34,14 +34,15 @@ class ModelCallRateLimiter:
     itself take the whole platform down when Redis hiccups is worse than an
     occasionally-oversized bill."""
 
-    def __init__(self, redis_client: RedisLike, *, per_minute: int, per_day: int):
+    def __init__(self, redis_client: RedisLike, *, per_minute: int, per_day: int, scope_prefix: str = ""):
         self._redis = redis_client
         self.per_minute = per_minute
         self.per_day = per_day
+        self.scope_prefix = scope_prefix  # a separate budget for e.g. evaluation runs, so they can't starve decision passes
 
     def allow(self, *, agent: str, tenant_id: str) -> tuple[bool, str | None]:
         now = int(time.time())
-        scope = tenant_id or "no-tenant"
+        scope = f"{self.scope_prefix}{tenant_id or 'no-tenant'}"
         minute_key = f"reo:ratelimit:model:{scope}:min:{now // 60}"
         day_key = f"reo:ratelimit:model:{scope}:day:{now // 86400}"
         try:

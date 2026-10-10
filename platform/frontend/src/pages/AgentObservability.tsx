@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import Badge from "../components/Badge";
 
@@ -125,13 +125,53 @@ function EvaluationTab() {
     refetchInterval: 10000,
   });
 
+  // A run takes minutes (one live model call per case) and its result only exists when it finishes,
+  // so track "is one queued or running" and refresh the list the moment it ends.
+  const { data: status } = useQuery<{ running: boolean; started_at: string | null }>({
+    queryKey: ["eval-status"],
+    queryFn: async () => (await api.get("/observability/eval-runs/status")).data,
+    refetchInterval: (query) => (query.state.data?.running ? 3000 : 15000),
+  });
+  const running = !!status?.running;
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !running) qc.invalidateQueries({ queryKey: ["eval-runs"] });
+    wasRunning.current = running;
+  }, [running, qc]);
+
+  const [downloading, setDownloading] = useState<string | null>(null);
+  async function downloadRun(run: EvalRun) {
+    setDownloading(run.id);
+    try {
+      const resp = await api.get(`/observability/eval-runs/${run.id}/export`, { responseType: "blob" });
+      const url = URL.createObjectURL(resp.data);
+      const link = document.createElement("a");
+      const stamp = new Date(run.created_at);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      link.href = url;
+      link.download = `agent-evaluation-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setError(null);
+    } catch (err: any) {
+      setError("Could not download the evaluation report");
+    } finally {
+      setDownloading(null);
+    }
+  }
+
   const trigger = useMutation({
     mutationFn: async () => (await api.post("/observability/eval-runs/run")).data,
     onSuccess: () => {
       setError(null);
-      setTimeout(() => qc.invalidateQueries({ queryKey: ["eval-runs"] }), 3000);
+      qc.invalidateQueries({ queryKey: ["eval-status"] });
     },
-    onError: (err: any) => setError(err?.response?.data?.detail || "Failed to trigger eval run — requires the model_admin role"),
+    onError: (err: any) => {
+      setError(err?.response?.data?.detail || "Failed to trigger eval run — requires the model_admin role");
+      qc.invalidateQueries({ queryKey: ["eval-status"] });
+    },
   });
 
   return (
@@ -143,9 +183,17 @@ function EvaluationTab() {
         fields and can never reason about the scenario.
       </p>
       {error && <div className="error-banner">{error}</div>}
-      <button onClick={() => trigger.mutate()} disabled={trigger.isPending} style={{ marginBottom: 16 }}>
-        {trigger.isPending ? "Queuing..." : "Run eval suite"}
-      </button>
+      <div className="row" style={{ marginBottom: 16, gap: 12 }}>
+        <button onClick={() => trigger.mutate()} disabled={trigger.isPending || running}>
+          {trigger.isPending ? "Queuing..." : running ? "Evaluation running…" : "Run eval suite"}
+        </button>
+        {running && (
+          <span className="muted" style={{ fontSize: 13 }}>
+            Started {status?.started_at ? new Date(status.started_at).toLocaleTimeString() : ""} — this takes a few minutes
+            with a live model; the result appears here when it finishes.
+          </span>
+        )}
+      </div>
 
       {isLoading && <div className="empty-state">Loading...</div>}
       {runs && runs.length === 0 && <div className="empty-state">No eval runs yet.</div>}
@@ -153,10 +201,19 @@ function EvaluationTab() {
         <div key={run.id} className="card" style={{ marginBottom: 12 }}>
           <div className="row-between" style={{ cursor: "pointer" }} onClick={() => setExpanded(expanded === run.id ? null : run.id)}>
             <div>
-              <strong>{run.passed_cases}/{run.total_cases} passed</strong>{" "}
-              <span className="muted">· {run.model_provider} · {run.triggered_by || "system"} · {new Date(run.created_at).toLocaleString()}</span>
+              <strong>{run.total_cases === 0 ? "Not scored" : `${run.passed_cases}/${run.total_cases} passed`}</strong>{" "}
+              <span className="muted">
+                · {run.model_provider} · {run.triggered_by || "system"} · {new Date(run.created_at).toLocaleString()}
+                {run.results.some((r) => r.outcome === "skipped") && ` · ${run.results.filter((r) => r.outcome === "skipped").length} not scored`}
+              </span>
             </div>
-            <Badge text={run.passed_cases === run.total_cases ? "all passed" : "some failed"} />
+            <div className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
+              <Badge text={run.total_cases === 0 ? "not scored" : run.passed_cases === run.total_cases ? "all passed" : "some failed"} />
+              <button className="secondary" disabled={downloading === run.id}
+                      onClick={(e) => { e.stopPropagation(); downloadRun(run); }}>
+                {downloading === run.id ? "Preparing…" : "Download Excel"}
+              </button>
+            </div>
           </div>
           {expanded === run.id && (
             <div className="evidence-box" style={{ marginTop: 10 }}>

@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     # gateway is exempt (zero-cost, and heavily used in tests with no Redis).
     model_rate_limit_per_minute: int = 20
     model_rate_limit_per_day: int = 2000
+    eval_rate_limit_per_minute: int = 60  # evaluation runs get their own budget so they cannot starve (or be starved by) decision passes
 
     # Model gateway circuit breaker (guardrails/circuit_breaker.py) — process-
     # wide defaults, used the first time a tenant's PlatformSettings row is

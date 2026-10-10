@@ -47,7 +47,7 @@ from agents.market_agent import assess as assess_market
 from agents.optimisation_reviewer import assess as assess_optimisation_reviewer
 from agents.risk_critic import assess as assess_risk_critic
 from context import EvidenceBundle
-from reo_common.model_gateway import ModelGateway
+from reo_common.model_gateway import CircuitOpen, ModelGateway, ProviderUnavailable, RateLimitExceeded
 
 
 def _bundle(**overrides) -> EvidenceBundle:
@@ -284,7 +284,7 @@ def run_eval_suite(gateway: ModelGateway, tenant_id: str = "00000000-0000-0000-0
     for case in EVAL_CASES:
         if case.tier == "behavioral" and gateway.provider_name == "mock":
             results.append({
-                "case": case.name, "agent": case.agent, "tier": case.tier, "outcome": "skipped",
+                "case": case.name, "agent": case.agent, "tier": case.tier, "description": case.description, "outcome": "skipped",
                 "detail": "behavioral cases require live model reasoning — mock gateway fills only schema-required fields generically",
             })
             continue
@@ -292,20 +292,27 @@ def run_eval_suite(gateway: ModelGateway, tenant_id: str = "00000000-0000-0000-0
             result = case.run(gateway, tenant_id)
             ok = case.check(result)
             results.append({
-                "case": case.name, "agent": case.agent, "tier": case.tier,
+                "case": case.name, "agent": case.agent, "tier": case.tier, "description": case.description,
                 "outcome": "passed" if ok else "failed",
                 "detail": case.description,
             })
             if ok:
                 passed += 1
+        except (RateLimitExceeded, CircuitOpen, ProviderUnavailable) as exc:
+            # the model was unavailable (budget, breaker, billing, outage): that says nothing
+            # about whether the agent behaves correctly, so it is not scored as a failure
+            results.append({
+                "case": case.name, "agent": case.agent, "tier": case.tier, "description": case.description, "outcome": "skipped",
+                "detail": f"not scored — model unavailable ({type(exc).__name__}): {exc}",
+            })
         except GatewayError as exc:
             results.append({
-                "case": case.name, "agent": case.agent, "tier": case.tier, "outcome": "failed",
+                "case": case.name, "agent": case.agent, "tier": case.tier, "description": case.description, "outcome": "failed",
                 "detail": f"agent failed closed (schema-invalid after retry): {exc}",
             })
         except Exception as exc:  # a case itself erroring is still a real finding, not a harness bug to hide
             results.append({
-                "case": case.name, "agent": case.agent, "tier": case.tier, "outcome": "failed",
+                "case": case.name, "agent": case.agent, "tier": case.tier, "description": case.description, "outcome": "failed",
                 "detail": f"eval case raised: {exc}",
             })
 

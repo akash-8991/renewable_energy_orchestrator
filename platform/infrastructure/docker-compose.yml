@@ -26,6 +26,7 @@ x-python-env: &python-env
   OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
   MODEL_RATE_LIMIT_PER_MINUTE: ${MODEL_RATE_LIMIT_PER_MINUTE:-20}
   MODEL_RATE_LIMIT_PER_DAY: ${MODEL_RATE_LIMIT_PER_DAY:-2000}
+  EVAL_RATE_LIMIT_PER_MINUTE: ${EVAL_RATE_LIMIT_PER_MINUTE:-60}  # agent evaluation runs have their own call budget
 
 services:
   postgres:

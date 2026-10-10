@@ -326,14 +326,18 @@ def activate_connector(
     if connector.status not in ("draft", "testing", "pending_activation"):
         raise HTTPException(status.HTTP_409_CONFLICT, f"connector cannot be activated from status={connector.status}")
     requires_mc = (connector.approval_policy or {}).get("requires_maker_checker", True)
-    if requires_mc and connector.created_by and connector.created_by == ctx.user_id:
+    own_connector = bool(requires_mc and connector.created_by and connector.created_by == ctx.user_id)
+    if own_connector and not ctx.is_platform_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "maker-checker: the connector's creator cannot also activate it")
 
     connector.status = "active"
     connector.activated_by = ctx.user_id
     db.flush()
+    # a platform admin (super user) may activate their own connector; the override is recorded, not hidden
     append_audit_event(db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
-                        event_type="connector.activated", payload={"connector_id": connector.id, "created_by": connector.created_by})
+                        event_type="connector.activated",
+                        payload={"connector_id": connector.id, "created_by": connector.created_by,
+                                 **({"maker_checker_overridden_by_platform_admin": True} if own_connector else {})})
     db.commit()
     return _to_summary(db, connector)
 

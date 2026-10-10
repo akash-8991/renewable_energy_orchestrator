@@ -22,10 +22,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
-from reo_common.events import CloudEvent, EventBus, STREAM_EVAL_REQUEST
+from reo_common.events import EVAL_INFLIGHT_KEY, EVAL_INFLIGHT_TTL_SECONDS, CloudEvent, EventBus, STREAM_EVAL_REQUEST
+from evaluation.eval_report import build_eval_workbook
 from models.canonical import AgentCallLog, AgentEvalRun
+from output.audit import append_audit_event
 from reo_common.security import AuthContext
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -178,14 +180,58 @@ def list_eval_runs(
     ]
 
 
+@router.get("/eval-runs/{run_id}/export")
+def export_eval_run(
+    run_id: str,
+    ctx: AuthContext = Depends(require_permission("read:dashboard")),
+    db: Session = Depends(db_session),
+) -> Response:
+    """The run as an Excel workbook: a summary, every check with what it tests and its status, and a
+    per-agent roll-up."""
+    run = db.execute(select(AgentEvalRun).where(AgentEvalRun.id == run_id, AgentEvalRun.tenant_id == ctx.tenant_id)).scalar_one_or_none()
+    if run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "evaluation run not found")
+    content = build_eval_workbook({
+        "id": run.id, "created_at": run.created_at, "triggered_by": run.triggered_by, "model_provider": run.model_provider,
+        "total_cases": run.total_cases, "passed_cases": run.passed_cases, "results": run.results,
+    })
+    append_audit_event(db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
+                        event_type="eval.exported", payload={"run_id": run.id, "bytes": len(content)})
+    db.commit()
+    filename = f"agent-evaluation-{run.created_at.strftime('%Y%m%d-%H%M')}.xlsx"
+    return Response(
+        content, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 class EvalRunTriggerResponse(BaseModel):
     status: str
+
+
+class EvalRunStatus(BaseModel):
+    running: bool
+    started_at: str | None
+
+
+@router.get("/eval-runs/status", response_model=EvalRunStatus)
+def eval_run_status(ctx: AuthContext = Depends(require_permission("read:dashboard"))) -> EvalRunStatus:
+    started = _get_bus()._redis.get(EVAL_INFLIGHT_KEY.format(tenant_id=ctx.tenant_id))  # noqa: SLF001
+    return EvalRunStatus(running=started is not None, started_at=started)
 
 
 @router.post("/eval-runs/run", response_model=EvalRunTriggerResponse)
 def trigger_eval_run(
     ctx: AuthContext = Depends(require_permission("manage:model_eval")),
 ) -> EvalRunTriggerResponse:
+    """Queue one evaluation run. A run takes minutes (one live model call per case) and
+    its result only appears when it finishes, so a second click while one is queued or
+    running used to queue a second full run — each spending 15+ model calls and, once the
+    first had used up the call budget, recording a useless all-failed row. Now refused."""
+    marker = EVAL_INFLIGHT_KEY.format(tenant_id=ctx.tenant_id)
+    started = datetime.now(timezone.utc).isoformat()
+    if not _get_bus()._redis.set(marker, started, nx=True, ex=EVAL_INFLIGHT_TTL_SECONDS):  # noqa: SLF001
+        raise HTTPException(status.HTTP_409_CONFLICT, "an evaluation run is already queued or running — its result appears when it finishes (a few minutes)")
     _get_bus().publish(STREAM_EVAL_REQUEST, CloudEvent(
         type="reo.eval.requested", source="api", tenant_id=ctx.tenant_id,
         data={"tenant_id": ctx.tenant_id, "triggered_by": ctx.email},

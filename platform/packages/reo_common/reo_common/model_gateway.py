@@ -66,6 +66,39 @@ class RateLimitExceeded(GatewayError):
     immediately, unlike a schema-validity failure)."""
 
 
+class CircuitOpen(GatewayError):
+    """The per-tenant circuit breaker is open — the call never reached the
+    provider. An availability condition, not evidence about the model's quality."""
+
+
+class ProviderUnavailable(GatewayError):
+    """The provider itself failed (billing/quota, auth, 429/5xx, timeout,
+    network) on the final attempt — not a schema-validity failure."""
+
+
+def unwrap_tool_input(data, schema: dict | None):
+    """Some models wrap an otherwise-correct structured answer in a single stray
+    key (Claude sometimes emits `{"$PARAMETER_NAME": {...}}` — the placeholder from
+    its tool-call format). If the payload has exactly one key that is not a
+    property of the schema, and the value is an object that does carry schema
+    properties, the value is the real answer."""
+    props = (schema or {}).get("properties") or {}
+    if isinstance(data, dict) and len(data) == 1 and props:
+        (key, inner), = data.items()
+        if key not in props and isinstance(inner, dict) and any(k in props for k in inner):
+            return inner
+    return data
+
+
+def _normalise_raw_json(raw_json: str, schema: dict) -> str:
+    try:
+        data = json.loads(raw_json)
+    except (TypeError, ValueError):
+        return raw_json
+    unwrapped = unwrap_tool_input(data, schema)
+    return raw_json if unwrapped is data else json.dumps(unwrapped)
+
+
 class ModelCallRecord(BaseModel):
     agent: str
     tenant_id: str
@@ -166,7 +199,7 @@ class ModelGateway(ABC):
                 logger.warning("model_call_circuit_open", extra={"record": record.model_dump()})
                 if self.on_call_record:
                     self.on_call_record(record)
-                raise GatewayError(reason or f"{agent}: circuit breaker open")
+                raise CircuitOpen(reason or f"{agent}: circuit breaker open")
 
         schema = response_model.model_json_schema()
         schema_name = response_model.__name__
@@ -180,6 +213,7 @@ class ModelGateway(ABC):
         start = time.perf_counter()
         retried = False
         last_error: Exception | None = None
+        last_was_provider_failure = False
         last_result: RawCallResult | None = None
         for attempt in range(2):
             try:
@@ -200,7 +234,7 @@ class ModelGateway(ABC):
                         schema_name=schema_name,
                         images=images,
                     )
-                parsed = response_model.model_validate_json(last_result.raw_json)
+                parsed = response_model.model_validate_json(_normalise_raw_json(last_result.raw_json, schema))
                 latency_ms = (time.perf_counter() - start) * 1000
                 record = ModelCallRecord(
                     agent=agent,
@@ -222,6 +256,7 @@ class ModelGateway(ABC):
                 return parsed, record
             except (ValidationError, json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
+                last_was_provider_failure = False
                 retried = True
                 if self.circuit_breaker is not None:
                     self.circuit_breaker.record_failure()
@@ -243,6 +278,7 @@ class ModelGateway(ABC):
                 # agent/worker.py already exists to handle gracefully per
                 # agent; it just never got the chance to.
                 last_error = exc
+                last_was_provider_failure = True
                 retried = True
                 if self.circuit_breaker is not None:
                     self.circuit_breaker.record_failure()
@@ -261,6 +297,8 @@ class ModelGateway(ABC):
         logger.warning("model_call_failed_closed", extra={"record": record.model_dump(), "raw": raw_for_log[:500]})
         if self.on_call_record:
             self.on_call_record(record)
+        if last_was_provider_failure:
+            raise ProviderUnavailable(f"{agent}: model provider error after retry: {last_error}")
         raise GatewayError(f"{agent}: schema-invalid response after retry: {last_error}")
 
 

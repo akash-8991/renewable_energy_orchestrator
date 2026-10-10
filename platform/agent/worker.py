@@ -26,7 +26,7 @@ from agents.risk_critic import assess as assess_risk
 from context import build_evidence_bundle
 from evaluation.eval_harness import run_eval_suite
 from database.connection import SessionLocal, break_glass_cross_tenant
-from reo_common.events import CloudEvent, EventBus, STREAM_DASHBOARD_FANOUT, STREAM_DECISION_READY, STREAM_EVAL_REQUEST
+from reo_common.events import EVAL_INFLIGHT_KEY, CloudEvent, EventBus, STREAM_DASHBOARD_FANOUT, STREAM_DECISION_READY, STREAM_EVAL_REQUEST
 from reo_common.heartbeat import beat
 from reo_common.model_gateway import get_model_gateway
 from reo_common.platform_settings import attach_circuit_breaker
@@ -121,14 +121,34 @@ def run_agents_for_decision(decision_id: str) -> None:
         db.close()
 
 
-def run_eval_request(tenant_id: str | None, triggered_by: str | None) -> None:
+def _eval_gateway():
+    """A gateway for evaluation runs, isolated from production decision passes:
+    its own call budget (so 15 eval calls can't use up the per-minute allowance
+    decisions need), and no circuit breaker (a model that returns bad output
+    during an eval is a *finding*, and must not open the breaker that protects
+    live decisions)."""
     gateway = get_model_gateway()
+    gateway.circuit_breaker = None
+    if gateway.rate_limiter is not None:
+        import redis as redis_lib
+
+        from guardrails.rate_limit import ModelCallRateLimiter
+        from reo_common.config import get_settings
+
+        s = get_settings()
+        gateway.rate_limiter = ModelCallRateLimiter(
+            redis_lib.from_url(s.redis_url, decode_responses=True),
+            per_minute=s.eval_rate_limit_per_minute, per_day=s.model_rate_limit_per_day, scope_prefix="eval:",
+        )
+    return gateway
+
+
+def run_eval_request(tenant_id: str | None, triggered_by: str | None) -> None:
+    gateway = _eval_gateway()
     db = SessionLocal()
     gateway.on_call_record = lambda record: persist_call_record(db, record)
     try:
         with break_glass_cross_tenant():
-            if tenant_id:
-                attach_circuit_breaker(gateway, db, tenant_id)
             summary = run_eval_suite(gateway, tenant_id=tenant_id) if tenant_id else run_eval_suite(gateway)
             db.add(AgentEvalRun(
                 tenant_id=tenant_id, triggered_by=triggered_by, model_provider=summary["model_provider"],
@@ -142,6 +162,11 @@ def run_eval_request(tenant_id: str | None, triggered_by: str | None) -> None:
         raise
     finally:
         db.close()
+        if tenant_id:  # let the dashboard start another run (see the in-flight guard in routers/observability.py)
+            try:
+                EventBus()._redis.delete(EVAL_INFLIGHT_KEY.format(tenant_id=tenant_id))  # noqa: SLF001
+            except Exception:
+                log.warning("could not clear the eval in-flight marker", exc_info=True)
 
 
 def main() -> None:

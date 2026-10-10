@@ -146,3 +146,7 @@ class AuthContext:
 
     def has_role(self, role: str) -> bool:
         return role in self.roles
+
+    @property
+    def is_platform_admin(self) -> bool:
+        return Role.PLATFORM_ADMIN.value in self.roles

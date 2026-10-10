@@ -198,7 +198,7 @@ in `cycle.py`/`worker.py` rather than a further LLM call — see `agents/base.py
 | Configuration Studio | `GET/PUT /configuration/settings` (`manage:settings`/`manage:platform_config`) — live weather feed, model gateway circuit breaker thresholds, SSO enablement, all per-tenant and live-editable with no redeploy |
 | Policy Studio | `GET/PUT /governance/autonomy-policy`, `GET/PUT /governance/objective-policy`, `POST /governance/e-stop`, `GET/PUT /forecasting/criteria`, `POST /forecasting/criteria/accept`, `POST /forecasting/retrain` (forecast criteria: accept the proposal or set your own) |
 | Simulation Lab | `GET/PUT /simulation/scenario`, `POST /simulation/scenario/reset` |
-| Agent Observability | `GET /observability/summary`, `GET /observability/agent-calls`, `GET/POST /observability/eval-runs[/run]` |
+| Agent Observability | `GET /observability/summary`, `GET /observability/agent-calls`, `GET /observability/eval-runs`, `GET /observability/eval-runs/status`, `GET /observability/eval-runs/{id}/export` (Excel: summary, every check with its description and status, per-agent roll-up), `POST /observability/eval-runs/run` (one run per tenant at a time; own call budget, no circuit breaker) |
 | Audit & Exports | `GET /audit/events`, `GET /audit/evidence/{decision_id}`, `POST /exports`, `GET /exports/{id}` (Excel export includes an "Actions" sheet) |
 | Tenant Administration | `GET/POST /admin/users`, `PATCH /admin/users/{id}` (deactivate/roles/password reset), `GET/POST /admin/tenants`, and the portfolio registry: `GET/POST /admin/portfolio/{sites,assets}`, `PATCH /admin/portfolio/assets/{id}` (`manage:assets`) |
 | Platform Operations | rollups over the above; no dedicated endpoint |

@@ -101,7 +101,8 @@ def decide_approval(
 
     if approval.requires_second_approver and approval.approver_id and approval.approver_id != ctx.user_id and not ctx.has_permission("approve:four_eyes"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "this high-risk approval requires a second, different approver")
-    if approval.approver_id == ctx.user_id:
+    self_approval = approval.approver_id == ctx.user_id
+    if self_approval and not ctx.is_platform_admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "an approver cannot approve their own prior decision on this item (no self-approval)")
 
     approval.outcome = body.outcome
@@ -111,7 +112,9 @@ def decide_approval(
 
     append_audit_event(
         db, tenant_id=ctx.tenant_id, actor_id=ctx.user_id, actor_label=ctx.email,
-        event_type="approval.decided", payload={"approval_id": approval.id, "outcome": body.outcome, "reason": body.reason},
+        event_type="approval.decided",
+        payload={"approval_id": approval.id, "outcome": body.outcome, "reason": body.reason,
+                 **({"self_approval_overridden_by_platform_admin": True} if self_approval else {})},
     )
 
     signal_state = None

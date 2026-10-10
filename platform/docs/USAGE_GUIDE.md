@@ -177,8 +177,9 @@ see §18 if yours is a different engine).
 
 **Via the dashboard:** Connector Studio → **+ New connector** → kind **Database** → paste the
 connection string → (optional) a table name → **Create (draft)** → have a *different* user click
-**Test** then **Activate** (maker-checker: the creator can never also activate — this is enforced
-server-side, not just hidden in the UI) → **Ingest now**.
+**Test** then **Activate** (maker-checker: the creator can't also activate — enforced server-side, not just
+hidden in the UI; the one exception is a `platform_admin`, whose override is flagged in the audit log)
+→ **Ingest now**.
 
 **Via the API:**
 
@@ -451,6 +452,38 @@ curl -X PUT http://localhost:8000/configuration/settings \
 If your provider has its own SLA/latency profile, tune the timeout accordingly — a slow but reliable
 provider wants a higher timeout and a higher failure threshold than a flaky one.
 
+### 12b. Agent evaluation (Agent Observability → Evaluation)
+
+**Run eval suite** sends 15 fixed test scenarios to the specialist agents — one live model call each —
+and scores them against known-correct expectations (e.g. "flags a HIGH finding when telemetry is mostly
+stale"). Requires `manage:model_eval` (model admin, platform admin). What to expect:
+
+- **It takes a few minutes** with a live model, and the result row only exists once the whole suite has
+  finished. While it runs the button reads **Evaluation running…** (with the start time) and the page
+  refreshes the history on its own when the run ends.
+- **One run at a time.** Clicking again while one is queued or running is refused (`409`) — it would
+  only queue a second full run of 15+ paid model calls. The agent worker processes a decision's agent
+  pass before an evaluation, so a run can wait behind it.
+- **Evaluation can't hurt live decisions, or the other way round.** It has its own call budget
+  (`EVAL_RATE_LIMIT_PER_MINUTE`, default 60) and does not use or trip the per-tenant circuit breaker, so
+  15 eval calls don't use up the per-minute allowance decision cycles need.
+- **Unavailability isn't scored as failure.** If the model can't be reached (billing, outage, rate
+  limit) a case is shown as `skipped — not scored (model unavailable)`, not `failed`, and is left out of
+  the pass count. A genuinely wrong or schema-invalid answer is still a failure.
+- On the **mock** provider the behavioural cases are skipped (mock can't reason); use a live provider
+  (§11) for a meaningful score.
+- **Download the result as Excel.** Every run in the history has a **Download Excel** button
+  (`GET /observability/eval-runs/{id}/export`; anyone who can see the dashboard, audit-logged as
+  `eval.exported`). The workbook has three sheets: **Summary** (run id, time, who triggered it, provider,
+  overall result, passed / failed / not-scored counts and pass rate, plus a legend for the statuses
+  and check types), **Checks** (one row per check: its name, agent, type, **what it checks**, a colour-
+  coded **status** — `PASSED` / `FAILED` / `NOT SCORED` — and the result detail or failure reason;
+  filterable, header frozen) and **By agent** (a roll-up per agent). Runs recorded before checks carried
+  their own description are described from the built-in catalogue, so older runs download just as well.
+  Text from the model or an error message is escaped so it can't run as a spreadsheet formula.
+- Models occasionally wrap their whole structured answer in a stray key (Claude: `$PARAMETER_NAME`);
+  the gateway unwraps that before validating, in evaluation and in live decision passes alike.
+
 ## 13. Real SSO / identity provider setup
 
 **Local/demo**: `docker compose up` already brings up a real, spec-compliant Keycloak container
@@ -548,7 +581,7 @@ seed only runs locally.
 | `model_admin` | + manage model registry/eval, deploy models, trigger evaluation runs |
 | `tenant_admin` | + manage users (incl. deactivate/reset), settings (Configuration Studio), connectors, policies, activate connectors, register sites/assets, accept/set forecast criteria |
 | `auditor_dpo` | + export evidence, read privacy data, manage data-subject requests |
-| `platform_admin` | **Superuser** — every permission that exists, platform-wide, including cross-tenant break-glass reads (all audited) |
+| `platform_admin` | **Superuser** — every permission that exists, platform-wide, including cross-tenant break-glass reads (all audited). Also not held to two separation-of-duties rules that bind everyone else: it may **activate a connector it created itself** (maker-checker) and **decide an approval it already decided on** (no-self-approval). Each use is recorded on the audit event (`maker_checker_overridden_by_platform_admin`, `self_approval_overridden_by_platform_admin`). It cannot yet grant the `platform_admin` role to others, nor run requests inside another tenant — tenant switching is not built |
 
 A user can hold multiple roles (`roles` is a list). Grant the minimum role that covers what someone
 actually needs to do — `platform_admin` is meant for platform operators, not day-to-day tenant users.
@@ -601,7 +634,7 @@ against a different `http://localhost:8000` vs. your real API domain.
 
 ## 18. Troubleshooting
 
-- **"connector cannot be activated"** — maker-checker: the user who created it can't also activate
+- **"connector cannot be activated"** — maker-checker: the user who created it can't also activate (except a platform admin)
   it. Use a second account.
 - **A `database` connector 400s with an SSRF/host-not-allowed error** — see §5's allow-list note.
 - **A different database engine** (MySQL, SQL Server, Oracle) — not supported by the `database`

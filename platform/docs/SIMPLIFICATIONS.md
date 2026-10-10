@@ -268,6 +268,28 @@ Added after an end-to-end review (`PRODUCTION_READINESS_REVIEW.md` §5). Still d
 - **Compose is a local/evaluation deployment.** The Vite dev server, Keycloak `start-dev` and laptop
   default credentials are not for production; the Terraform stack is.
 
+## Platform admin as super user — what that does and doesn't mean
+
+`platform_admin` holds every permission (derived from the permission table, so new permissions are
+covered automatically) and is exempt from two separation-of-duties rules — connector maker-checker and the
+no-self-approval rule — with the override written to the audit event each time. It is **not** exempt from:
+the safety-case requirement for `AUTONOMOUS_BOUNDED` (the platform won't fabricate a reference), the
+OT gateway's independent checks, the e-stop, tenant isolation (it works in its own tenant; other tenants
+are visible only through the audited tenant list), or the guards against deactivating yourself or a
+tenant's last administrator. A single person holding this role can therefore both propose and activate
+a data source — keep it to a small number of named people (see the hardening checklist).
+
+## Agent evaluation — what it is and isn't
+
+The eval suite is a small fixed set (15 cases across the specialist agents), run sequentially on the
+agent worker, so a live run takes minutes and queues behind a decision's agent pass. It is isolated from
+production (own call budget, no breaker), serialised per tenant by a Redis marker (30-minute TTL as a
+safety net), and does not score model unavailability. It is not a labelled-corpus benchmark: there is no
+repeat-run statistics, rubric scoring or regression history beyond the stored runs (a run can be
+downloaded as an Excel report, but there is no trend view across runs). The case descriptions exist twice
+— in `eval_harness.py` (where cases run) and `eval_catalogue.py` (plain data, so the API can describe
+older runs); a test fails if they drift. See the harness docstring for what a fuller suite would need.
+
 ## Forecasting, scenarios and maintenance — design decisions
 
 - **Forecasts are a physics baseline *and* a trained ML model, chosen by the operator.** The ML model
