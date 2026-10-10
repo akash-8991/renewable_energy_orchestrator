@@ -1,0 +1,418 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1574" viewBox="0 0 2400 1574">
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#334155"/></marker>
+<marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#15803d"/></marker>
+<marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#be123c"/></marker>
+<marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1d4ed8"/></marker>
+<marker id="p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6d28d9"/></marker>
+<marker id="k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker>
+<linearGradient id="hdr" x1="0" x2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset="1" stop-color="#172554"/></linearGradient>
+</defs>
+<rect width="2400" height="1574" fill="#f8fafc"/>
+<rect x="0" y="0" width="2400" height="104" fill="url(#hdr)"/>
+<text x="50" y="52" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="36" font-weight="800" fill="#ffffff" text-anchor="start">Renewable Energy Orchestrator — Platform Architecture &amp; Process Flow</text>
+<text x="50" y="84" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" font-weight="500" fill="#bfdbfe" text-anchor="start">A deterministic optimizer decides  ·  AI agents explain  ·  policy and people govern  ·  an independent OT gateway has the last word</text>
+<text x="2350" y="52" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff" text-anchor="end">10-step closed loop</text>
+<text x="2350" y="82" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="500" fill="#bfdbfe" text-anchor="end">sense → decide → govern → execute → learn</text>
+<text x="50" y="134" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#0369a1" text-anchor="start">USERS, EXPERIENCE &amp; CONTROL PLANE</text>
+<rect x="50" y="146" width="520" height="156" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2"/>
+<rect x="50" y="146" width="520" height="6" rx="3" fill="#0369a1" opacity="0.9"/>
+<text x="66" y="180" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#0c4a6e" text-anchor="start">People (role-based access)</text>
+<text x="66" y="209.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Operator · Senior operator (four-eyes approval, e-stop)</text>
+<text x="66" y="233.60000000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Portfolio manager · OT admin · Model admin</text>
+<text x="66" y="257.40000000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Tenant admin · Auditor / DPO · Platform admin</text>
+<rect x="600" y="146" width="600" height="156" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2"/>
+<rect x="600" y="146" width="600" height="6" rx="3" fill="#0369a1" opacity="0.9"/>
+<text x="616" y="180" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#0c4a6e" text-anchor="start">Dashboard — React, 14 workspaces</text>
+<text x="616" y="209.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Portfolio Operations · Decision Centre · Customers</text>
+<text x="616" y="229.60000000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Approval Inbox · Live Signal Monitor · Action Tickets</text>
+<text x="616" y="249.40000000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Connector Studio · Configuration · Policy Studio</text>
+<text x="616" y="269.20000000000005" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Simulation Lab · Agent Observability · Audit &amp; Exports</text>
+<text x="616" y="289.00000000000006" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Tenant Administration (+ portfolio registry) · Platform Ops</text>
+<rect x="1230" y="146" width="560" height="156" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2"/>
+<rect x="1230" y="146" width="560" height="6" rx="3" fill="#0369a1" opacity="0.9"/>
+<text x="1246" y="180" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#0c4a6e" text-anchor="start">API — FastAPI (multi-tenant)</text>
+<text x="1246" y="209.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">JWT + SSO (OIDC / Keycloak) · 9-role RBAC</text>
+<text x="1246" y="233.60000000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Account re-checked on every request</text>
+<text x="1246" y="257.40000000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Login throttle · security headers · /ready</text>
+<text x="1246" y="281.20000000000005" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Every governance action written to the audit log</text>
+<rect x="1820" y="146" width="530" height="156" rx="12" fill="#e0f2fe" stroke="#0369a1" stroke-width="2"/>
+<rect x="1820" y="146" width="530" height="6" rx="3" fill="#0369a1" opacity="0.9"/>
+<text x="1836" y="180" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#0c4a6e" text-anchor="start">Control plane — human decisions</text>
+<text x="1836" y="209.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Connector Studio: maker-checker, SSRF guard, vault</text>
+<text x="1836" y="233.60000000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Policy Studio: autonomy mode, objective weights,</text>
+<text x="1836" y="257.40000000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">forecast criteria (accept or set), e-stop</text>
+<text x="1836" y="281.20000000000005" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Portfolio registry · Simulation Lab (inject shocks)</text>
+<path d="M 570,246 L 600,246" fill="none" stroke="#0369a1" stroke-width="2.4" stroke-linejoin="round" marker-end="url(#k)"/>
+<path d="M 1200,246 L 1230,246" fill="none" stroke="#0369a1" stroke-width="2.4" stroke-linejoin="round" marker-end="url(#k)"/>
+<path d="M 1790,246 L 1820,246" fill="none" stroke="#0369a1" stroke-width="2.4" stroke-linejoin="round" marker-end="url(#k)"/>
+<rect x="50" y="346" width="400" height="880" rx="16" fill="#ffffff" stroke="#475569" stroke-width="2.2"/>
+<rect x="50" y="346" width="400" height="52" rx="16" fill="#475569"/>
+<rect x="50" y="376" width="400" height="22" fill="#475569"/>
+<text x="68" y="372" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" font-weight="800" fill="#ffffff" text-anchor="start">SENSE</text>
+<text x="68" y="391" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#ffffffcc" text-anchor="start">what the platform is fed</text>
+<rect x="490" y="346" width="420" height="880" rx="16" fill="#ffffff" stroke="#b45309" stroke-width="2.2"/>
+<rect x="490" y="346" width="420" height="52" rx="16" fill="#b45309"/>
+<rect x="490" y="376" width="420" height="22" fill="#b45309"/>
+<text x="508" y="372" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" font-weight="800" fill="#ffffff" text-anchor="start">INGEST &amp; DIGITAL TWIN</text>
+<text x="508" y="391" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#ffffffcc" text-anchor="start">validate, store, know the current state</text>
+<rect x="960" y="346" width="420" height="880" rx="16" fill="#ffffff" stroke="#15803d" stroke-width="2.2"/>
+<rect x="960" y="346" width="420" height="52" rx="16" fill="#15803d"/>
+<rect x="960" y="376" width="420" height="22" fill="#15803d"/>
+<text x="978" y="372" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" font-weight="800" fill="#ffffff" text-anchor="start">DECIDE</text>
+<text x="978" y="391" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#ffffffcc" text-anchor="start">optimizer-worker — deterministic MILP</text>
+<rect x="1450" y="346" width="450" height="880" rx="16" fill="#ffffff" stroke="#6d28d9" stroke-width="2.2"/>
+<rect x="1450" y="346" width="450" height="52" rx="16" fill="#6d28d9"/>
+<rect x="1450" y="376" width="450" height="22" fill="#6d28d9"/>
+<text x="1468" y="372" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" font-weight="800" fill="#ffffff" text-anchor="start">EXPLAIN &amp; GOVERN</text>
+<text x="1468" y="391" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#ffffffcc" text-anchor="start">agent evidence, policy, approval</text>
+<rect x="1940" y="346" width="410" height="880" rx="16" fill="#ffffff" stroke="#be123c" stroke-width="2.2"/>
+<rect x="1940" y="346" width="410" height="52" rx="16" fill="#be123c"/>
+<rect x="1940" y="376" width="410" height="22" fill="#be123c"/>
+<text x="1958" y="372" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="21" font-weight="800" fill="#ffffff" text-anchor="start">EXECUTE &amp; LEARN</text>
+<text x="1958" y="391" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#ffffffcc" text-anchor="start">independent gateway, closed loop</text>
+<rect x="64" y="414" width="372" height="186" rx="12" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<rect x="64" y="414" width="372" height="6" rx="3" fill="#475569" opacity="0.9"/>
+<text x="110" y="448" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b" text-anchor="start">Site telemetry</text>
+<text x="80" y="477.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Solar · wind · battery storage · demand ·</text>
+<text x="80" y="497.6" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">grid interconnection — power, SoC, price,</text>
+<text x="80" y="517.4" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">frequency</text>
+<text x="80" y="541.1999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Streamed every 10 s (simulated by the</text>
+<text x="80" y="560.9999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">edge-simulator; a real site arrives via</text>
+<text x="80" y="580.7999999999998" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">connectors)</text>
+<circle cx="90" cy="443" r="16" fill="#475569" stroke="#ffffff" stroke-width="2.5"/>
+<text x="90" y="449" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">1</text>
+<rect x="64" y="614" width="372" height="166" rx="12" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<rect x="64" y="614" width="372" height="6" rx="3" fill="#475569" opacity="0.9"/>
+<text x="80" y="648" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b" text-anchor="start">Connector Studio feeds</text>
+<text x="80" y="677.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">database · data_table (URL or file) · IoT</text>
+<text x="80" y="697.5999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">· market-price API</text>
+<text x="80" y="721.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Registered by one person, activated by</text>
+<text x="80" y="741.1999999999998" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">another (maker-checker); credentials go to</text>
+<text x="80" y="760.9999999999998" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">the vault</text>
+<rect x="64" y="794" width="372" height="118" rx="12" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<rect x="64" y="794" width="372" height="6" rx="3" fill="#475569" opacity="0.9"/>
+<text x="80" y="828" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b" text-anchor="start">Dropped files &amp; uploads</text>
+<text x="80" y="857.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">CSV / JSON / XLSX in the watched data</text>
+<text x="80" y="877.5999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">folder or uploaded — checksummed, ingested</text>
+<text x="80" y="897.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">once</text>
+<rect x="64" y="926" width="372" height="146" rx="12" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<rect x="64" y="926" width="372" height="6" rx="3" fill="#475569" opacity="0.9"/>
+<text x="80" y="960" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b" text-anchor="start">Documents (PDF / image)</text>
+<text x="80" y="989.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Maintenance &amp; storm notices → vision</text>
+<text x="80" y="1009.5999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">extraction → a person promotes them to a</text>
+<text x="80" y="1029.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">capacity constraint</text>
+<rect x="64" y="1086" width="372" height="126" rx="12" fill="#f1f5f9" stroke="#475569" stroke-width="2"/>
+<rect x="64" y="1086" width="372" height="6" rx="3" fill="#475569" opacity="0.9"/>
+<text x="80" y="1120" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#1e293b" text-anchor="start">Live weather</text>
+<text x="80" y="1149.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Open-Meteo cloud cover &amp; wind speed for</text>
+<text x="80" y="1169.6" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">the horizon (optional, per tenant)</text>
+<rect x="504" y="414" width="392" height="120" rx="12" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+<rect x="504" y="414" width="392" height="6" rx="3" fill="#b45309" opacity="0.9"/>
+<text x="550" y="448" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#78350f" text-anchor="start">Connector poller — every 60 s</text>
+<text x="520" y="477.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Re-reads every active connector like a manual</text>
+<text x="520" y="497.6" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">ingest; checks a content fingerprint and a</text>
+<text x="520" y="517.4" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">per-asset newest-timestamp mark</text>
+<circle cx="530" cy="443" r="16" fill="#b45309" stroke="#ffffff" stroke-width="2.5"/>
+<text x="530" y="449" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">2</text>
+<polygon points="616,545.0 722.0,590 616,635.0 510.0,590" fill="#fef3c7" stroke="#b45309" stroke-width="2.2"/>
+<text x="616" y="595.95" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#78350f" text-anchor="middle">New data?</text>
+<text x="736" y="576" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#78350f" text-anchor="start">No → keep monitoring,</text>
+<text x="736" y="594" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#78350f" text-anchor="start">ingest nothing (stale</text>
+<text x="736" y="612" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#78350f" text-anchor="start">data is never re-ingested)</text>
+<path d="M 616,534 L 616,545" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#a)"/>
+<path d="M 616,635 L 616,665" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#a)"/>
+<rect x="622" y="637" width="34.68" height="22" rx="5" fill="#ffffff" opacity="0.95"/>
+<text x="628" y="652" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#78350f" text-anchor="start">Yes</text>
+<rect x="504" y="665" width="392" height="124" rx="12" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+<rect x="504" y="665" width="392" height="6" rx="3" fill="#b45309" opacity="0.9"/>
+<text x="520" y="699" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#78350f" text-anchor="start">Redis stream  reo.telemetry</text>
+<text x="520" y="728.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">The event bus — capped and persisted;</text>
+<text x="520" y="748.5999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">readings carry tenant, asset, metric, time</text>
+<text x="520" y="768.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">and quality</text>
+<path d="M 616,789 L 616,805" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#a)"/>
+<rect x="504" y="805" width="392" height="122" rx="12" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+<rect x="504" y="805" width="392" height="6" rx="3" fill="#b45309" opacity="0.9"/>
+<text x="520" y="839" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#78350f" text-anchor="start">Validate · dedupe · quarantine</text>
+<text x="520" y="868.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Known asset and metric, numeric value, ISO</text>
+<text x="520" y="888.5999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">time; replays are idempotent; bad rows →</text>
+<text x="520" y="908.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">quarantine in object storage</text>
+<path d="M 616,927 L 616,943" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#a)"/>
+<rect x="504" y="943" width="392" height="80" rx="12" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+<rect x="504" y="943" width="392" height="6" rx="3" fill="#b45309" opacity="0.9"/>
+<text x="520" y="977" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#78350f" text-anchor="start">TimescaleDB telemetry</text>
+<text x="520" y="1006.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Hypertable, 3-year retention</text>
+<path d="M 616,1023 L 616,1039" fill="none" stroke="#b45309" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#a)"/>
+<rect x="504" y="1039" width="392" height="173" rx="12" fill="#fef3c7" stroke="#b45309" stroke-width="2"/>
+<rect x="504" y="1039" width="392" height="6" rx="3" fill="#b45309" opacity="0.9"/>
+<text x="550" y="1073" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#78350f" text-anchor="start">Digital twin</text>
+<text x="520" y="1102.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Latest reading per asset, freshness-scored:</text>
+<text x="520" y="1122.6" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">fresh ≤ 30 s · stale ≤ 5 min · bad. Stale</text>
+<text x="520" y="1142.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">data lowers confidence and is flagged.</text>
+<text x="520" y="1166.1999999999998" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">It is the single source of current state for</text>
+<text x="520" y="1185.9999999999998" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">the optimizer, the agents and the dashboard.</text>
+<circle cx="530" cy="1068" r="16" fill="#b45309" stroke="#ffffff" stroke-width="2.5"/>
+<text x="530" y="1074" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">3</text>
+<rect x="974" y="414" width="392" height="76" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+<rect x="974" y="414" width="392" height="6" rx="3" fill="#15803d" opacity="0.9"/>
+<text x="990" y="448" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#14532d" text-anchor="start">Cycle trigger</text>
+<text x="990" y="477.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Every 120 s, or on a data-change event</text>
+<path d="M 1094,490 L 1094,504" fill="none" stroke="#15803d" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#g)"/>
+<rect x="974" y="504" width="392" height="76" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+<rect x="974" y="504" width="392" height="6" rx="3" fill="#15803d" opacity="0.9"/>
+<text x="990" y="538" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#14532d" text-anchor="start">Trusted snapshot</text>
+<text x="990" y="567.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Latest state of every active asset</text>
+<path d="M 1094,580 L 1094,594" fill="none" stroke="#15803d" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#g)"/>
+<rect x="974" y="594" width="392" height="128" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+<rect x="974" y="594" width="392" height="6" rx="3" fill="#15803d" opacity="0.9"/>
+<text x="1020" y="628" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#14532d" text-anchor="start">Forecast — 24 h, q10 / q50 / q90</text>
+<text x="990" y="657.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Physics baseline + a trained ML model per</text>
+<text x="990" y="677.5999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">asset. Operators accept or set the criteria;</text>
+<text x="990" y="697.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">physics is used until they do.</text>
+<circle cx="1000" cy="623" r="16" fill="#15803d" stroke="#ffffff" stroke-width="2.5"/>
+<text x="1000" y="629" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">4</text>
+<path d="M 1094,722 L 1094,736" fill="none" stroke="#15803d" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#g)"/>
+<rect x="974" y="736" width="392" height="164" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+<rect x="974" y="736" width="392" height="6" rx="3" fill="#15803d" opacity="0.9"/>
+<text x="1020" y="770" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#14532d" text-anchor="start">MILP optimizer — OR-Tools</text>
+<text x="990" y="799.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Sole dispatch authority. Weighted objectives;</text>
+<text x="990" y="819.5999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">base plan + risk-averse alternative + 6</text>
+<text x="990" y="839.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">deterministic named shocks (cloud cover, wind</text>
+<text x="990" y="859.1999999999998" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">surge, price spike, battery outage, line</text>
+<text x="990" y="878.9999999999998" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">congestion, demand shock).</text>
+<circle cx="1000" cy="765" r="16" fill="#15803d" stroke="#ffffff" stroke-width="2.5"/>
+<text x="1000" y="771" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">5</text>
+<path d="M 1094,900 L 1094,914" fill="none" stroke="#15803d" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#g)"/>
+<polygon points="1094,914.0 1214.0,954 1094,994.0 974.0,954" fill="#dcfce7" stroke="#15803d" stroke-width="2.2"/>
+<text x="1094" y="950.0125" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="700" fill="#14532d" text-anchor="middle">Independent</text>
+<text x="1094" y="968.1375" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="700" fill="#14532d" text-anchor="middle">validator OK?</text>
+<text x="1230" y="948" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#14532d" text-anchor="start">No → Decision failed,</text>
+<text x="1230" y="966" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#14532d" text-anchor="start">nothing actioned</text>
+<path d="M 1094,994 L 1094,1016" fill="none" stroke="#15803d" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#g)"/>
+<rect x="1100" y="997" width="34.68" height="22" rx="5" fill="#ffffff" opacity="0.95"/>
+<text x="1106" y="1012" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#14532d" text-anchor="start">Yes</text>
+<rect x="974" y="1016" width="392" height="112" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+<rect x="974" y="1016" width="392" height="6" rx="3" fill="#15803d" opacity="0.9"/>
+<text x="1020" y="1050" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#14532d" text-anchor="start">Decision record + Actions</text>
+<text x="990" y="1079.8" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">Versioned ledger entry + governed actions:</text>
+<text x="990" y="1099.6" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">charge · discharge · buy · sell · curtail ·</text>
+<text x="990" y="1119.3999999999999" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="400" fill="#1f2937" text-anchor="start">demand response</text>
+<circle cx="1000" cy="1045" r="16" fill="#15803d" stroke="#ffffff" stroke-width="2.5"/>
+<text x="1000" y="1051" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">6</text>
+<rect x="974" y="1138" width="392" height="74" rx="12" fill="#dcfce7" stroke="#15803d" stroke-width="2"/>
+<rect x="974" y="1138" width="392" height="6" rx="3" fill="#15803d" opacity="0.9"/>
+<text x="990" y="1172" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#14532d" text-anchor="start">Maintenance advisories</text>
+<text x="990" y="1200.48" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="400" fill="#1f2937" text-anchor="start">Advisory only — shown to people, never executed</text>
+<rect x="1464" y="414" width="422" height="318" rx="12" fill="#ede9fe" stroke="#6d28d9" stroke-width="2"/>
+<rect x="1464" y="414" width="422" height="6" rx="3" fill="#6d28d9"/>
+<circle cx="1490" cy="443" r="16" fill="#6d28d9" stroke="#ffffff" stroke-width="2.5"/>
+<text x="1490" y="449" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">7</text>
+<text x="1510" y="448" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#4c1d95" text-anchor="start">Agent layer — agent-worker</text>
+<text x="1480" y="474" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">Wakes on decision-ready. Builds one evidence</text>
+<text x="1480" y="493" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">bundle, then runs nine agents; their findings and</text>
+<text x="1480" y="512" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">an explanation are written onto the Decision.</text>
+<rect x="1480.0" y="540" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1542.3333333333333" y="559.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Data quality</text>
+<rect x="1612.6666666666667" y="540" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1675.0" y="559.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Forecast</text>
+<rect x="1745.3333333333335" y="540" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1807.6666666666667" y="559.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Asset</text>
+<rect x="1480.0" y="578" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1542.3333333333333" y="597.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Market</text>
+<rect x="1612.6666666666667" y="578" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1675.0" y="597.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Grid</text>
+<rect x="1745.3333333333335" y="578" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1807.6666666666667" y="597.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Optimiser review</text>
+<rect x="1480.0" y="616" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1542.3333333333333" y="635.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Risk / critic</text>
+<rect x="1612.6666666666667" y="616" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1675.0" y="635.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Governance</text>
+<rect x="1745.3333333333335" y="616" width="124.66666666666667" height="30" rx="15.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="1807.6666666666667" y="635.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Explanation</text>
+<text x="1480" y="664" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#4c1d95" text-anchor="start">Model gateway: OpenRouter · Anthropic · OpenAI</text>
+<text x="1480" y="682" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="500" fill="#1f2937" text-anchor="start">Schema-validated JSON · circuit breaker · fail-closed</text>
+<rect x="1474" y="692" width="402" height="28" rx="14" fill="#6d28d9"/>
+<text x="1675.0" y="711" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">Evidence &amp; explanation only — agents never issue commands</text>
+<rect x="1464" y="746" width="422" height="466" rx="12" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/>
+<rect x="1464" y="746" width="422" height="6" rx="3" fill="#1d4ed8"/>
+<circle cx="1490" cy="775" r="16" fill="#1d4ed8" stroke="#ffffff" stroke-width="2.5"/>
+<text x="1490" y="781" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">8</text>
+<text x="1510" y="780" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#1e3a8a" text-anchor="start">Policy &amp; safety engine</text>
+<rect x="1628" y="798" width="246" height="42" rx="8" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.5"/>
+<text x="1636" y="815" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="800" fill="#1e3a8a" text-anchor="start">OBSERVE</text>
+<text x="1636" y="830" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">plan and record only</text>
+<rect x="1628" y="848" width="246" height="56" rx="8" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.5"/>
+<text x="1636" y="865" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="800" fill="#1e3a8a" text-anchor="start">RECOMMEND</text>
+<text x="1636" y="880" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">recommended to operators; no signal</text>
+<text x="1636" y="894" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">is sent</text>
+<rect x="1628" y="912" width="246" height="70" rx="8" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.5"/>
+<text x="1636" y="929" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="800" fill="#1e3a8a" text-anchor="start">APPROVAL_REQUIRED</text>
+<text x="1636" y="944" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">signal + pending approval; a person</text>
+<text x="1636" y="958" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">decides (four-eyes if high risk)</text>
+<rect x="1628" y="990" width="246" height="84" rx="8" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.5"/>
+<text x="1636" y="1007" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="800" fill="#1e3a8a" text-anchor="start">AUTONOMOUS_BOUNDED</text>
+<text x="1636" y="1022" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">low-risk, within the ceiling and</text>
+<text x="1636" y="1036" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">with a recorded safety case:</text>
+<text x="1636" y="1050" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">dispatched. Higher risk still needs</text>
+<text x="1636" y="1064" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="400" fill="#1f2937" text-anchor="start">approval</text>
+<polygon points="1542,851.0 1612.0,896 1542,941.0 1472.0,896" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2.2"/>
+<text x="1542" y="892.15" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#1e3a8a" text-anchor="middle">Autonomy</text>
+<text x="1542" y="909.65" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#1e3a8a" text-anchor="middle">mode?</text>
+<path d="M 1612,896 L 1626,819.0" fill="none" stroke="#1d4ed8" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#b)"/>
+<path d="M 1612,896 L 1626,876.0" fill="none" stroke="#1d4ed8" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#b)"/>
+<path d="M 1612,896 L 1626,947.0" fill="none" stroke="#1d4ed8" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#b)"/>
+<path d="M 1612,896 L 1626,1032.0" fill="none" stroke="#1d4ed8" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#b)"/>
+<rect x="1476" y="1086" width="398" height="114" rx="10" fill="#ffffff" stroke="#1d4ed8" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="1488" y="1112" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#1e3a8a" text-anchor="start">Approval Inbox — a human decides</text>
+<text x="1488" y="1134" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#1f2937" text-anchor="start">Approve · reject · modify within bounds · hold.</text>
+<text x="1488" y="1151" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#1f2937" text-anchor="start">Time-boxed — it expires if untouched. Every outcome</text>
+<text x="1488" y="1168" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="400" fill="#1f2937" text-anchor="start">is audited.</text>
+<rect x="1954" y="414" width="382" height="318" rx="12" fill="#ffe4e6" stroke="#be123c" stroke-width="2"/>
+<rect x="1954" y="414" width="382" height="6" rx="3" fill="#be123c"/>
+<circle cx="1980" cy="443" r="16" fill="#be123c" stroke="#ffffff" stroke-width="2.5"/>
+<text x="1980" y="449" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">9</text>
+<text x="2000" y="448" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#881337" text-anchor="start">OT command gateway</text>
+<text x="2205" y="448" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#be123c" text-anchor="start">independent</text>
+<text x="1970" y="474" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">Re-validates from fresh state right before</text>
+<text x="1970" y="493" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">dispatch and never trusts the caller. Two</text>
+<text x="1970" y="512" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">phases — prepare, then commit (re-checked).</text>
+<rect x="1970.0" y="542" width="171.0" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2055.5" y="560.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">✓ E-stop not active</text>
+<rect x="2149.0" y="542" width="171.0" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2234.5" y="560.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">✓ Inside envelope &amp; window</text>
+<rect x="1970.0" y="578" width="171.0" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2055.5" y="596.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">✓ Asset active, state fresh</text>
+<rect x="2149.0" y="578" width="171.0" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2234.5" y="596.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">✓ SoC limits respected</text>
+<rect x="1970.0" y="614" width="171.0" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2055.5" y="632.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">✓ Idempotent (nonce + key)</text>
+<rect x="2149.0" y="614" width="171.0" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2234.5" y="632.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">✓ Advisory types refused</text>
+<polygon points="2066,644.0 2170.0,680 2066,716.0 1962.0,680" fill="#ffe4e6" stroke="#be123c" stroke-width="2.2"/>
+<text x="2066" y="685.075" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="700" fill="#881337" text-anchor="middle">All checks pass?</text>
+<text x="2186" y="676" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#881337" text-anchor="start">No → rejected /</text>
+<text x="2186" y="693" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#881337" text-anchor="start">timed out</text>
+<rect x="1954" y="746" width="382" height="112" rx="12" fill="#ffe4e6" stroke="#be123c" stroke-width="2"/>
+<rect x="1954" y="746" width="382" height="6" rx="3" fill="#be123c" opacity="0.9"/>
+<text x="1970" y="780" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#881337" text-anchor="start">Assets / SCADA (simulated)</text>
+<text x="1970" y="809.14" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">Acknowledges the set-point and applies it. A</text>
+<text x="1970" y="828.28" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">real site plugs a real OT adapter in here.</text>
+<rect x="1954" y="872" width="382" height="118" rx="12" fill="#ffe4e6" stroke="#be123c" stroke-width="2"/>
+<rect x="1954" y="872" width="382" height="6" rx="3" fill="#be123c"/>
+<text x="1970" y="904" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#881337" text-anchor="start">Signal lifecycle</text>
+<rect x="1966.0" y="918" width="63.6" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="1997.8" y="936.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">draft</text>
+<path d="M 2029.6,932 L 2039.6,932" fill="none" stroke="#be123c" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#r)"/>
+<rect x="2039.6" y="918" width="63.6" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2071.4" y="936.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">approval</text>
+<path d="M 2103.2,932 L 2113.2,932" fill="none" stroke="#be123c" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#r)"/>
+<rect x="2113.2" y="918" width="63.6" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2145.0" y="936.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">queued</text>
+<path d="M 2176.7999999999997,932 L 2186.8,932" fill="none" stroke="#be123c" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#r)"/>
+<rect x="2186.8" y="918" width="63.6" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2218.6000000000004" y="936.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">sent</text>
+<path d="M 2250.4,932 L 2260.4,932" fill="none" stroke="#be123c" stroke-width="1.6" stroke-linejoin="round" marker-end="url(#r)"/>
+<rect x="2260.4" y="918" width="63.6" height="28" rx="14.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="2292.2000000000003" y="936.2" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12" font-weight="600" fill="#881337" text-anchor="middle">acked</text>
+<text x="1968" y="972" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="500" fill="#881337" text-anchor="start">failure paths: rejected · timed out · cancelled</text>
+<rect x="1954" y="1004" width="382" height="112" rx="12" fill="#ffe4e6" stroke="#be123c" stroke-width="2"/>
+<rect x="1954" y="1004" width="382" height="6" rx="3" fill="#be123c" opacity="0.9"/>
+<text x="2000" y="1038" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="18" font-weight="700" fill="#881337" text-anchor="start">Reconcile &amp; learn</text>
+<text x="1970" y="1067.14" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">The effect shows up in telemetry, is</text>
+<text x="1970" y="1086.2800000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">ingested, and the next cycle plans from the</text>
+<text x="1970" y="1105.4200000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">new state.</text>
+<circle cx="1980" cy="1033" r="16" fill="#be123c" stroke="#ffffff" stroke-width="2.5"/>
+<text x="1980" y="1039" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle">10</text>
+<rect x="1954" y="1130" width="382" height="82" rx="12" fill="#be123c"/>
+<text x="1970" y="1162" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="800" fill="#ffffff" text-anchor="start">Emergency stop</text>
+<text x="1970" y="1186" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#ffe4e6" text-anchor="start">One switch disables all new dispatch</text>
+<text x="1970" y="1204" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#ffe4e6" text-anchor="start">immediately; monitoring continues.</text>
+<path d="M 450,640 L 490,640" fill="none" stroke="#475569" stroke-width="4.5" stroke-linejoin="round" marker-end="url(#a)"/>
+<text transform="translate(466.0,595.0) rotate(-90)" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#334155">feeds</text>
+<path d="M 910,452 L 960,452" fill="none" stroke="#15803d" stroke-width="3.4" stroke-linejoin="round" marker-end="url(#g)"/>
+<text transform="translate(932.0,475.0) rotate(-90)" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#14532d">event</text>
+<path d="M 910,1125.5 L 944.0,1125.5 L 944.0,542 L 960,542" fill="none" stroke="#334155" stroke-width="2.6" stroke-linejoin="round" marker-end="url(#a)"/>
+<text transform="translate(935.0,762.0) rotate(-90)" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#334155">twin state</text>
+<path d="M 1380,1060 L 1400,1060 L 1400,454 L 1450,454" fill="none" stroke="#6d28d9" stroke-width="3" stroke-linejoin="round" marker-end="url(#p)"/>
+<path d="M 1380,1086 L 1428,1086 L 1428,896 L 1450,896" fill="none" stroke="#1d4ed8" stroke-width="3" stroke-linejoin="round" marker-end="url(#b)"/>
+<text transform="translate(1392,772.0) rotate(-90)" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#4c1d95">decision-ready</text>
+<text transform="translate(1445,1045.0) rotate(-90)" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1e3a8a">actions to govern</text>
+<path d="M 1900,700 L 1940,700" fill="none" stroke="#be123c" stroke-width="4" stroke-linejoin="round" marker-end="url(#r)"/>
+<text transform="translate(1917.0,618.24) rotate(-90)" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#881337">dispatch</text>
+<path d="M 2145.0,1226 L 2145.0,1250 L 700.0,1250 L 700.0,1228" fill="none" stroke="#be123c" stroke-width="3.4" stroke-linejoin="round" stroke-dasharray="10 6" marker-end="url(#r)"/>
+<rect x="1260.75" y="1227" width="538.5" height="23" rx="5" fill="#f8fafc" opacity="0.95"/>
+<text x="1530.0" y="1243" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#881337" text-anchor="middle">closed loop — the effect of every command comes back as telemetry</text>
+<path d="M 700.0,302 L 700.0,344" fill="none" stroke="#0369a1" stroke-width="2.4" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#k)"/>
+<rect x="606.25" y="322" width="187.5" height="21" rx="5" fill="#f8fafc" opacity="0.95"/>
+<text x="700.0" y="336" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#0c4a6e" text-anchor="middle">register &amp; activate feeds</text>
+<path d="M 1170.0,302 L 1170.0,344" fill="none" stroke="#0369a1" stroke-width="2.4" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#k)"/>
+<rect x="1034.13" y="322" width="271.74" height="21" rx="5" fill="#f8fafc" opacity="0.95"/>
+<text x="1170.0" y="336" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#0c4a6e" text-anchor="middle">forecast criteria · objective weights</text>
+<path d="M 1675.0,302 L 1675.0,344" fill="none" stroke="#0369a1" stroke-width="2.4" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#k)"/>
+<rect x="1581.25" y="322" width="187.5" height="21" rx="5" fill="#f8fafc" opacity="0.95"/>
+<text x="1675.0" y="336" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#0c4a6e" text-anchor="middle">autonomy mode · approvals</text>
+<path d="M 2145.0,302 L 2145.0,344" fill="none" stroke="#0369a1" stroke-width="2.4" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#k)"/>
+<rect x="2047.74" y="322" width="194.52" height="21" rx="5" fill="#f8fafc" opacity="0.95"/>
+<text x="2145.0" y="336" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="#0c4a6e" text-anchor="middle">e-stop · signal monitoring</text>
+<text x="50" y="1282" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#0f766e" text-anchor="start">SHARED FOUNDATION — every stage reads and writes here</text>
+<rect x="50" y="1290" width="560" height="156" rx="12" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<rect x="50" y="1290" width="560" height="6" rx="3" fill="#0f766e" opacity="0.9"/>
+<text x="66" y="1324" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#134e4a" text-anchor="start">PostgreSQL + TimescaleDB</text>
+<text x="66" y="1353.14" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Canonical model · decision ledger · actions, approvals, signals,</text>
+<text x="78" y="1372.2800000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">commands</text>
+<text x="66" y="1396.4200000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Tenant isolation on every row · hash-chained, tamper-evident audit</text>
+<text x="78" y="1415.5600000000004" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">log</text>
+<text x="66" y="1439.7000000000005" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Retention: telemetry 3 y, forecasts 90 d</text>
+<rect x="635.0" y="1290" width="420" height="156" rx="12" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<rect x="635.0" y="1290" width="420" height="6" rx="3" fill="#0f766e" opacity="0.9"/>
+<text x="651.0" y="1324" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#134e4a" text-anchor="start">Redis</text>
+<text x="651.0" y="1353.14" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Event bus: telemetry, decision-cycle,</text>
+<text x="663.0" y="1372.2800000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">decision-ready streams</text>
+<text x="651.0" y="1396.4200000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Login throttle · worker heartbeats · change</text>
+<text x="663.0" y="1415.5600000000004" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">fingerprints</text>
+<rect x="1080.0" y="1290" width="400" height="156" rx="12" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<rect x="1080.0" y="1290" width="400" height="6" rx="3" fill="#0f766e" opacity="0.9"/>
+<text x="1096.0" y="1324" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#134e4a" text-anchor="start">Object store (S3 / SeaweedFS)</text>
+<text x="1096.0" y="1353.14" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Governed XLSX evidence exports (presigned</text>
+<text x="1108.0" y="1372.2800000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">URLs)</text>
+<text x="1096.0" y="1396.4200000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Quarantined bad rows · lakehouse</text>
+<rect x="1505.0" y="1290" width="340" height="156" rx="12" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<rect x="1505.0" y="1290" width="340" height="6" rx="3" fill="#0f766e" opacity="0.9"/>
+<text x="1521.0" y="1324" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#134e4a" text-anchor="start">Secrets vault</text>
+<text x="1521.0" y="1353.14" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Connector credentials encrypted</text>
+<text x="1533.0" y="1372.2800000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">(Fernet; AWS Secrets Manager in prod);</text>
+<text x="1533.0" y="1391.4200000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">never shown again</text>
+<rect x="1870.0" y="1290" width="480" height="156" rx="12" fill="#ccfbf1" stroke="#0f766e" stroke-width="2"/>
+<rect x="1870.0" y="1290" width="480" height="6" rx="3" fill="#0f766e" opacity="0.9"/>
+<text x="1886.0" y="1324" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#134e4a" text-anchor="start">Export worker &amp; observability</text>
+<text x="1886.0" y="1353.14" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• Evidence packs by decision ID · agent call logs &amp; eval</text>
+<text x="1898.0" y="1372.2800000000002" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">harness</text>
+<text x="1886.0" y="1396.4200000000003" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14.5" font-weight="400" fill="#1f2937" text-anchor="start">• /ready, healthchecks, restart policy, non-root images</text>
+<rect x="50" y="1472" width="298.14814814814815" height="34" rx="17.0" fill="#ffffff" stroke="#15803d" stroke-width="1.6"/>
+<text x="199.07407407407408" y="1493.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#14532d" text-anchor="middle">Optimizer is the sole dispatch authority</text>
+<rect x="360.14814814814815" y="1472" width="264.0740740740741" height="34" rx="17.0" fill="#ffffff" stroke="#6d28d9" stroke-width="1.6"/>
+<text x="492.1851851851852" y="1493.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#4c1d95" text-anchor="middle">Agents explain — they never command</text>
+<rect x="636.2222222222222" y="1472" width="298.14814814814815" height="34" rx="17.0" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.6"/>
+<text x="785.2962962962963" y="1493.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#1e3a8a" text-anchor="middle">People govern: approvals, policy, e-stop</text>
+<rect x="946.3703703703703" y="1472" width="277.7037037037037" height="34" rx="17.0" fill="#ffffff" stroke="#be123c" stroke-width="1.6"/>
+<text x="1085.2222222222222" y="1493.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#881337" text-anchor="middle">OT gateway re-validates independently</text>
+<rect x="1236.074074074074" y="1472" width="304.962962962963" height="34" rx="17.0" fill="#ffffff" stroke="#15803d" stroke-width="1.6"/>
+<text x="1388.5555555555554" y="1493.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#14532d" text-anchor="middle">Operators accept or set forecast criteria</text>
+<rect x="1553.037037037037" y="1472" width="304.962962962963" height="34" rx="17.0" fill="#ffffff" stroke="#15803d" stroke-width="1.6"/>
+<text x="1705.5185185185185" y="1493.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#14532d" text-anchor="middle">Shocks are deterministic, not Monte Carlo</text>
+<rect x="1870.0" y="1472" width="216.37037037037038" height="34" rx="17.0" fill="#ffffff" stroke="#475569" stroke-width="1.6"/>
+<text x="1978.1851851851852" y="1493.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#1e293b" text-anchor="middle">Maintenance is advisory only</text>
+<rect x="2098.3703703703704" y="1472" width="264.0740740740741" height="34" rx="17.0" fill="#ffffff" stroke="#0f766e" stroke-width="1.6"/>
+<text x="2230.4074074074074" y="1493.725" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13.5" font-weight="600" fill="#134e4a" text-anchor="middle">Everything audited, tenant-isolated</text>
+<text x="50" y="1529" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#334155" text-anchor="start">Legend</text>
+<path d="M 130,1524 L 184,1524" fill="none" stroke="#334155" stroke-width="3" stroke-linejoin="round" marker-end="url(#a)"/>
+<text x="194" y="1529" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#334155" text-anchor="start">main data / control flow</text>
+<path d="M 412.4,1524 L 466.4,1524" fill="none" stroke="#15803d" stroke-width="3" stroke-linejoin="round" marker-end="url(#g)"/>
+<text x="476.4" y="1529" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#334155" text-anchor="start">decision path</text>
+<path d="M 611.2,1524 L 665.2,1524" fill="none" stroke="#be123c" stroke-width="3" stroke-linejoin="round" marker-end="url(#r)"/>
+<text x="675.2" y="1529" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#334155" text-anchor="start">safety / dispatch path</text>
+<path d="M 878.4000000000001,1524 L 932.4000000000001,1524" fill="none" stroke="#0369a1" stroke-width="3" stroke-linejoin="round" stroke-dasharray="7 5" marker-end="url(#k)"/>
+<text x="942.4000000000001" y="1529" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#334155" text-anchor="start">human configuration &amp; governance</text>
+<text x="1231.6000000000001" y="1529" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#334155" text-anchor="start">◇ decision point   ① … ⑩ process steps</text>
+<text x="2350" y="1529" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#64748b" text-anchor="end">Deployed with Docker Compose (local) or Terraform → AWS: ECS Fargate · RDS · ElastiCache · S3 · CloudFront</text>
+</svg>

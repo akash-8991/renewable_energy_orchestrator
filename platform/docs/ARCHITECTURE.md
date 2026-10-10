@@ -6,6 +6,11 @@ scope reduction, and the root plan for the full module-by-module build order. Se
 `PRODUCTION_READINESS_REVIEW.md` for a direct answer on deployment readiness and a consolidated
 punch list — read that first if the question is "can this go live."
 
+![Platform architecture and process flow](architecture-diagram.png)
+
+*The diagram above shows the whole platform at a glance — the ten-step closed loop, the key decision
+points, the nine agents and where governance sits. Vector version: [`architecture-diagram.svg`](architecture-diagram.svg).*
+
 ## Non-negotiable spine (present in every spec doc — must survive any future change)
 
 ```
