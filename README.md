@@ -8,7 +8,8 @@ flexibility, grid interconnection and market participation — built to the ET A
 README with the full quickstart (Docker Compose), repository layout, model-provider configuration
 (OpenRouter by default), and how to run the test suite and the live demo script.
 
-**Demo Video Link** - "https://drive.google.com/file/d/1R_5gh7qfVy8u3zLiIxKDSTPzTR823SCa/view?usp=sharing"
+**Demo Video Link** - "https://drive.google.com/file/d/1C27oC0_PWGlOhhl5oFB9Wz-tW5yqv2HW/view?usp=sharing"
+
 ```
 renewable_energy_orchestrator/   Client spec documents (BRD/PRD/FRD/TRD/...) — reference only
 platform/                        The implementation — see platform/README.md
